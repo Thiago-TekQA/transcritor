@@ -1,0 +1,30 @@
+# Segredos e configuração local (nunca versionar)
+config.json
+.env
+
+# Ambiente e caches
+.venv/
+__pycache__/
+*.pyc
+
+# Dados de reuniões e saídas (confidenciais)
+/1_Videos/
+/2_Audios/
+/3_Transcricoes/
+/4_Diarizacoes/
+/5_Logs/
+/6_Concluidos/
+/7_Perfis_Voz/
+/8_Resumos/
+/_portal/
+/_modelos/
+/perfis_voz.json
+/OLD/
+
+# Temporários
+*.parcial
+*.copiando
+*.log
+*.zip
+ev_teste.jsonl
+.pipeline.lock

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="portal-token" content="__TOKEN__">
+<title>Portal do Transcritor</title>
+<link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+<header class="topo">
+  <a class="marca" href="#/nova">Transcritor</a>
+  <nav class="menu" id="menu">
+    <a href="#/nova" data-rota="nova">Nova execução</a>
+    <a href="#/execucoes" data-rota="execucoes">Execuções</a>
+    <a href="#/resultados" data-rota="resultados">Resultados</a>
+  </nav>
+  <a class="ativa" id="ativa" href="#/execucoes" hidden></a>
+</header>
+<main id="app" class="conteudo" aria-live="polite"></main>
+<div id="modal-fundo" class="modal-fundo" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

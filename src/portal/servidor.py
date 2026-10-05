@@ -156,6 +156,53 @@ async def config(request):
     })
 
 
+async def parados_arquivos(request):
+
+    try:
+        return _json({"arquivos": await _bloqueante(
+            ex.arquivos_do_item, request.match_info["nome"])})
+    except ValueError as e:
+        return _erro(str(e))
+
+
+async def parados_deletar(request):
+
+    d = await _corpo(request)
+
+    # só apaga com confirmação explícita (a tela envia depois do "OK")
+    if d.get("confirmar") is not True:
+        return _erro("confirmação ausente")
+
+    try:
+        return _json(await _bloqueante(
+            ex.deletar_parado, request.match_info["nome"]))
+    except PermissionError as e:
+        return _erro(str(e), 409)
+    except ValueError as e:
+        return _erro(str(e))
+
+
+async def parados_ocultar(request):
+
+    try:
+        await _bloqueante(ex.ocultar_parado, request.match_info["nome"])
+        return _json({"ok": True})
+    except ValueError as e:
+        return _erro(str(e))
+
+
+async def parados_restaurar(request):
+
+    await _bloqueante(ex.restaurar_parado, request.match_info["nome"])
+
+    return _json({"ok": True})
+
+
+async def parados_ocultos(request):
+
+    return _json({"itens": await _bloqueante(ex.listar_ocultos)})
+
+
 async def processos_listar(request):
 
     try:
@@ -370,6 +417,11 @@ def criar_app():
 
     app.router.add_get("/api/ping", ping)
     app.router.add_get("/api/config", config)
+    app.router.add_get("/api/parados/ocultos", parados_ocultos)
+    app.router.add_get("/api/parados/{nome}/arquivos", parados_arquivos)
+    app.router.add_post("/api/parados/{nome}/deletar", parados_deletar)
+    app.router.add_post("/api/parados/{nome}/ocultar", parados_ocultar)
+    app.router.add_post("/api/parados/{nome}/restaurar", parados_restaurar)
     app.router.add_get("/api/processos", processos_listar)
     app.router.add_post("/api/processos/{pid}/encerrar", processos_encerrar)
     app.router.add_get("/api/ambiente", ambiente_verificar)

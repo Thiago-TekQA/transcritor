@@ -276,6 +276,98 @@ class TesteParados(unittest.TestCase):
             ex.planejar(os.path.join(self.base, "nao_existe"), ["mp3"])
 
 
+class TesteAcoesDosParados(unittest.TestCase):
+    """Remover da lista e deletar arquivos: ações ativas do usuário, por item."""
+
+    CAMPOS = ("VIDEOS_DIR", "AUDIOS_DIR", "TRANS_DIR", "DIARIZ_DIR", "RESUMOS_DIR", "DONE_DIR", "PORTAL_DIR")
+
+    def setUp(self):
+        self.base = tempfile.mkdtemp(prefix="teste_acoes_")
+        self.orig = {c: getattr(cfg, c) for c in self.CAMPOS}
+        self.orig_exec = (ex.EXECUCOES_DIR, ex.execucao_ativa)
+        for c in self.CAMPOS:
+            pasta = os.path.join(self.base, c)
+            os.makedirs(pasta)
+            setattr(cfg, c, pasta)
+        ex.EXECUCOES_DIR = os.path.join(self.base, "execucoes")
+        ex.execucao_ativa = lambda: None
+
+    def tearDown(self):
+        for c, v in self.orig.items():
+            setattr(cfg, c, v)
+        ex.EXECUCOES_DIR, ex.execucao_ativa = self.orig_exec
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _criar(self, pasta, nome, conteudo="x"):
+        caminho = os.path.join(getattr(cfg, pasta), nome)
+        with open(caminho, "w") as f:
+            f.write(conteudo)
+        return caminho
+
+    def _item_completo(self, nome):
+        return [
+            self._criar("VIDEOS_DIR", f"{nome}.mp4"), self._criar("AUDIOS_DIR", f"{nome}.mp3"),
+            self._criar("TRANS_DIR", f"{nome}.txt"), self._criar("DIARIZ_DIR", f"{nome}_diarizado.txt"),
+            self._criar("RESUMOS_DIR", f"{nome}_resumo.txt"), self._criar("TRANS_DIR", f"{nome}.txt.parcial"),
+        ]
+
+    def test_remover_da_lista_nao_mexe_em_arquivos_e_da_para_restaurar(self):
+        arquivos = self._item_completo("a")
+        self.assertEqual([p["nome"] for p in ex.listar_parados()], ["a"])
+        ex.ocultar_parado("a")
+        self.assertEqual(ex.listar_parados(), [])                       # some da lista
+        self.assertTrue(all(os.path.exists(a) for a in arquivos))        # arquivos intactos
+        self.assertEqual([p["nome"] for p in ex.listar_ocultos()], ["a"])
+        self.assertEqual(ex.planejar("", ["mp3"])["n_ocultos"], 1)
+        ex.restaurar_parado("a")
+        self.assertEqual([p["nome"] for p in ex.listar_parados()], ["a"])
+
+    def test_deletar_apaga_so_os_arquivos_do_item(self):
+        a = self._item_completo("a")
+        b = self._item_completo("b")
+        r = ex.deletar_parado("a")
+        self.assertEqual(len(r["removidos"]), 6)
+        self.assertEqual(r["falhas"], [])
+        self.assertTrue(not any(os.path.exists(x) for x in a))
+        self.assertTrue(all(os.path.exists(x) for x in b))              # outro item intacto
+
+    def test_arquivos_do_item_lista_o_que_sera_apagado(self):
+        self._item_completo("a")
+        nomes = sorted(x["arquivo"] for x in ex.arquivos_do_item("a"))
+        self.assertEqual(nomes, ["a.mp3", "a.mp4", "a.txt", "a.txt.parcial", "a_diarizado.txt", "a_resumo.txt"])
+        self.assertEqual(ex.arquivos_do_item("nao_existe"), [])
+
+    def test_deletar_recusa_item_concluido(self):
+        os.makedirs(os.path.join(cfg.DONE_DIR, "c"))
+        resumo = self._criar("RESUMOS_DIR", "c_resumo.txt")
+        with self.assertRaises(ValueError):
+            ex.deletar_parado("c")
+        self.assertTrue(os.path.exists(resumo))
+
+    def test_deletar_recusa_com_execucao_em_andamento(self):
+        arq = self._criar("AUDIOS_DIR", "d.mp3")
+        ex.execucao_ativa = lambda: "20260101_000000"
+        with self.assertRaises(PermissionError):
+            ex.deletar_parado("d")
+        self.assertTrue(os.path.exists(arq))
+
+    def test_nome_com_caminho_e_recusado(self):
+        fora = os.path.join(self.base, "fora.txt")
+        open(fora, "w").write("x")
+        for ruim in ("..", "..\\fora", "a/b", "", "x:y"):
+            with self.assertRaises(ValueError):
+                ex.deletar_parado(ruim)
+            with self.assertRaises(ValueError):
+                ex.arquivos_do_item(ruim)
+        self.assertTrue(os.path.exists(fora))
+
+    def test_deletar_tira_o_item_dos_ocultos(self):
+        self._item_completo("e")
+        ex.ocultar_parado("e")
+        ex.deletar_parado("e")
+        self.assertEqual(ex.listar_ocultos(), [])
+
+
 def _p(pid, ppid, nome, cmd="", ram=100, inicio=1000):
     return {"pid": pid, "ppid": ppid, "nome": nome, "cmd": cmd,
             "inicio": inicio + pid, "cpu_s": 1.0, "ram_mb": ram}

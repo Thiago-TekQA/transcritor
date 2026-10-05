@@ -40,8 +40,11 @@ Requisitos, rede corporativa/antivírus e atualização de instalações antigas
    Só áudio, Só transcrição, Só resumo, Personalizado) e clique em *Analisar*.
    O portal mostra, por arquivo e etapa, o que será executado, o que já existe
    e o que está bloqueado. Itens que ficaram **parados no meio do caminho** em
-   execuções anteriores aparecem numa lista à parte, para você decidir se
-   continuam.
+   execuções anteriores aparecem numa lista à parte, **desmarcados** — você marca
+   os que devem continuar. Cada item tem dois botões, que só agem quando você
+   clica: **Remover da lista** (apenas esconde o item; dá para trazê-lo de volta
+   em "ocultos") e **Deletar arquivos** (apaga os arquivos intermediários dele na
+   área de trabalho, depois de uma confirmação que lista o que será apagado).
 2. **Execução**: estado ao vivo de cada arquivo/etapa (progresso, falhas,
    retentativa na CPU, pausa térmica, log). Botões: *Parar após o arquivo
    atual*, *Cancelar agora* e *Retomar*.
@@ -100,8 +103,9 @@ nem entra no pacote** — guarda o token da Hugging Face.
 ## Segurança
 
 - O servidor escuta só em `127.0.0.1`, valida o `Host`, exige token por sessão e
-  `Origin` correto nos POSTs, não serve `config.json` e não tem endpoint que
-  apague ou escreva na sua pasta de origem.
+  `Origin` correto nos POSTs, não serve `config.json` e nunca altera a sua pasta
+  de origem. A única exclusão é a de arquivos intermediários da área de trabalho
+  (botão *Deletar arquivos*), só com confirmação e nunca de itens já concluídos.
 - Dados de reuniões e `config.json` estão no `.gitignore`. Nunca coloque tokens
   no código.
 

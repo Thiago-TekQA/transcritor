@@ -200,6 +200,7 @@
     });
     const areaPlano = h("div", {});
     const areaAvisos = h("div", {});
+    const areaOcultos = h("div", {});
     const areaPresets = h("div", { class: "presets" });
     const areaEtapas = h("div", { class: "etapas" });
     const chkSub = h("input", { type: "checkbox" });
@@ -265,7 +266,8 @@
         est.erroOrigem = erroOrigem;
         // item novo na lista nasce marcado; o que o usuário já desmarcou continua desmarcado
         est.sel = new Set(plano.itens.filter((i) => !i.excluido && (!est.vistos.has(i.nome) || anterior.has(i.nome))).map((i) => i.nome));
-        est.selParados = new Set(plano.parados.filter((i) => !est.vistosP.has(i.nome) || anteriorP.has(i.nome)).map((i) => i.nome));
+        // parados NÃO vêm marcados: o usuário escolhe o que continua
+        est.selParados = new Set(plano.parados.filter((i) => est.vistosP.has(i.nome) && anteriorP.has(i.nome)).map((i) => i.nome));
         plano.itens.forEach((i) => est.vistos.add(i.nome));
         plano.parados.forEach((i) => est.vistosP.add(i.nome));
         desenharPlano();
@@ -297,12 +299,70 @@
       }
     }
 
+    async function chamar(caminho, corpo) {
+      try {
+        return await api(caminho, { method: "POST", corpo });
+      } catch (e) { alert(e.message); return null; }
+    }
+
+    async function removerDaLista(i) {
+      await chamar(`/api/parados/${encodeURIComponent(i.nome)}/ocultar`);
+      est.selParados.delete(i.nome);
+      analisar();
+    }
+
+    async function restaurar(i) {
+      await chamar(`/api/parados/${encodeURIComponent(i.nome)}/restaurar`);
+      await analisar();
+      if (areaOcultos.childNodes.length) mostrarOcultos();
+    }
+
+    async function deletarArquivos(i) {
+      let arqs;
+      try {
+        arqs = (await api(`/api/parados/${encodeURIComponent(i.nome)}/arquivos`)).arquivos;
+      } catch (e) { alert(e.message); return; }
+      if (!arqs.length) { alert("Este item não tem arquivos na área de trabalho."); return; }
+      const total = arqs.reduce((a, x) => a + x.tamanho, 0);
+      const lista = arqs.map((x) => `• ${x.pasta}\\${x.arquivo} (${fmtTam(x.tamanho)})`).join("\n");
+      if (!confirm(`Deletar ${arqs.length} arquivo(s) de "${i.nome}" (${fmtTam(total)})?\n\n${lista}\n\n` +
+        "Isso não pode ser desfeito. A sua pasta de origem NÃO é tocada.")) return;
+      const r = await chamar(`/api/parados/${encodeURIComponent(i.nome)}/deletar`, { confirmar: true });
+      if (r && r.falhas && r.falhas.length) alert("Alguns arquivos não puderam ser apagados:\n" + r.falhas.join("\n"));
+      est.selParados.delete(i.nome);
+      await analisar();
+      if (areaOcultos.childNodes.length) mostrarOcultos();
+    }
+
+    async function mostrarOcultos() {
+      let itens;
+      try {
+        itens = (await api("/api/parados/ocultos")).itens;
+      } catch (e) { alert(e.message); return; }
+      if (!itens.length) { areaOcultos.replaceChildren(); return; }
+      areaOcultos.replaceChildren(h("div", { class: "cartao" },
+        h("div", { class: "linha", style: "margin-bottom:8px" }, h("h2", { style: "margin:0" }, `Itens ocultos da lista (${itens.length})`),
+          h("span", { class: "espaco" }), h("button", { onclick: () => areaOcultos.replaceChildren() }, "Fechar")),
+        h("table", {}, h("tbody", {}, itens.map((i) => h("tr", {},
+          h("td", { class: "nome" }, i.nome, h("div", { class: "sutil" }, `Já tem: ${i.feitas.join(", ") || "—"}`)),
+          h("td", {}, h("div", { class: "linha" },
+            h("button", { onclick: () => restaurar(i) }, "Voltar para a lista"),
+            h("button", { class: "perigo", onclick: () => deletarArquivos(i) }, "Deletar arquivos")))))))));
+    }
+
+    function linkOcultos(p) {
+      return p.n_ocultos ? h("div", { class: "sutil", style: "margin-bottom:12px" },
+        `${p.n_ocultos} item(ns) oculto(s) da lista de parados · `,
+        h("a", { href: "#", onclick: (ev) => { ev.preventDefault(); mostrarOcultos(); } }, "mostrar")) : null;
+    }
+
     function desenharPlano() {
       const p = est.plano;
       const parados = p.parados || [];
 
       if (!p.itens.length && !parados.length) {
         trocar(areaPlano, est.erroOrigem ? h("div", { class: "aviso-faixa erro" }, est.erroOrigem) : null,
+          linkOcultos(p),
           est.origem && !est.erroOrigem ? h("div", { class: "cartao vazio" }, "Nenhum arquivo de áudio ou vídeo encontrado nesta pasta.")
             : h("div", { class: "cartao vazio" }, "Informe a pasta com os vídeos/áudios e clique em Analisar."));
         return;
@@ -344,16 +404,19 @@
               h("div", { class: "sutil" }, textoParou(i), i.parou ? " · " : "",
                 i.parou ? h("a", { href: `#/execucao/${i.parou.run}` }, "ver execução") : null)),
             h("td", { class: "sutil" }, fmtData(i.modificado)),
-            ...celulasEtapas(i));
+            ...celulasEtapas(i),
+            h("td", {}, h("div", { class: "linha", style: "flex-wrap:nowrap" },
+              h("button", { title: "Esconde o item da lista; os arquivos ficam", onclick: () => removerDaLista(i) }, "Remover da lista"),
+              h("button", { class: "perigo", title: "Apaga os arquivos intermediários deste item", onclick: () => deletarArquivos(i) }, "Deletar arquivos"))));
         });
         cartaoParados = h("div", { class: "cartao" },
           h("div", { class: "linha", style: "margin-bottom:6px" },
             h("h2", { style: "margin:0" }, `Parados no meio do caminho (${parados.length})`)),
           h("p", { class: "sub", style: "margin:0 0 10px" },
-            "Estes itens já estão na área de trabalho e não foram concluídos. Marque os que devem continuar; o que já foi feito (vídeo, áudio, etapas prontas) é mantido e não é refeito."),
+            "Estes itens já estão na área de trabalho e não foram concluídos. Marque os que devem continuar (o que já foi feito não é refeito). Remover da lista só esconde o item; Deletar arquivos apaga os arquivos intermediários dele."),
           h("div", { class: "tabela-rolagem" }, h("table", {},
             h("thead", {}, h("tr", {}, h("th", {}, todosP), h("th", {}, "Item"), h("th", {}, "Última atividade"),
-              ...p.etapas.map((e) => h("th", {}, rotulo(e))))),
+              ...p.etapas.map((e) => h("th", {}, rotulo(e))), h("th", {}, ""))),
             h("tbody", {}, linhasP))));
       }
 
@@ -427,7 +490,7 @@
             (escolhidos.length ? `${escolhidos.length} da pasta` : "") +
             (copiar ? ` · copiar ${fmtTam(copiar)} para a área de trabalho` : "")),
           h("span", { class: "espaco" }), iniciar)),
-        cartaoParados, cartaoOrigem);
+        cartaoParados, linkOcultos(p), cartaoOrigem);
     }
 
     desenharControles();
@@ -448,6 +511,7 @@
       h("div", { class: "cartao" },
         h("h2", {}, "2. O que executar"), areaPresets, areaEtapas),
       areaPlano,
+      areaOcultos,
     );
 
     async function verificarConcorrencia() {

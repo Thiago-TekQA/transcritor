@@ -315,6 +315,10 @@ def planejar(origem, etapas, recursivo=False):
         "etapas": etapas,
         "itens": itens,
         "parados": parados,
+        "n_ocultos": len([
+            p for p in listar_parados(incluir_ocultos=True)
+            if p["oculto"] and p["nome"] not in nomes_origem
+        ]),
     }
 
 
@@ -368,7 +372,7 @@ def _ultima_parada(nome):
     return None
 
 
-def listar_parados():
+def listar_parados(incluir_ocultos=False):
     """Itens que já estão na área de trabalho e NÃO foram concluídos (sem
     pasta em 6_Concluidos), com o que já existe de cada um e onde pararam."""
 
@@ -451,10 +455,17 @@ def listar_parados():
 
     saida = []
 
+    ocultos = set(_ler_ocultos())
+
     for nome, d in itens.items():
 
         # já concluído: o resumo em 8_Resumos é a cópia permanente
         if os.path.isdir(os.path.join(cfg.DONE_DIR, nome)):
+            continue
+
+        d["oculto"] = nome in ocultos
+
+        if d["oculto"] and not incluir_ocultos:
             continue
 
         d["feitas"] = [rotulos[c] for c in rotulos if c in d["_chaves"]]
@@ -469,6 +480,146 @@ def listar_parados():
     saida.sort(key=lambda i: i["modificado"], reverse=True)
 
     return saida
+
+
+# --- itens parados: ocultar da lista e deletar arquivos --------------------
+
+
+def _arquivo_ocultos():
+
+    return os.path.join(cfg.PORTAL_DIR, "ocultos.json")
+
+
+def _ler_ocultos():
+
+    dados = _ler_json(_arquivo_ocultos(), [])
+
+    return dados if isinstance(dados, list) else []
+
+
+def ocultar_parado(nome):
+    """Tira o item da lista de parados SEM mexer em nenhum arquivo."""
+
+    if not _nome_valido(nome):
+        raise ValueError("nome inválido")
+
+    ocultos = _ler_ocultos()
+
+    if nome not in ocultos:
+        ocultos.append(nome)
+        _escrever_json(_arquivo_ocultos(), ocultos)
+
+
+def restaurar_parado(nome):
+
+    ocultos = [n for n in _ler_ocultos() if n != nome]
+
+    _escrever_json(_arquivo_ocultos(), ocultos)
+
+
+def listar_ocultos():
+
+    return [p for p in listar_parados(incluir_ocultos=True) if p["oculto"]]
+
+
+def arquivos_do_item(nome):
+    """Arquivos intermediários do item na ÁREA DE TRABALHO (nunca a pasta de
+    origem do usuário): cópia do vídeo/áudio, mp3, transcrição, diarização,
+    resumo e eventuais sobras .parcial/.copiando."""
+
+    if not _nome_valido(nome):
+        raise ValueError("nome inválido")
+
+    achados = []
+
+    def varrer(pasta, aceita):
+
+        if not os.path.isdir(pasta):
+            return
+
+        for a in os.listdir(pasta):
+
+            caminho = os.path.join(pasta, a)
+
+            if not os.path.isfile(caminho):
+                continue
+
+            base = a
+            for sufixo in (".parcial", ".copiando"):
+                if base.endswith(sufixo):
+                    base = base[: -len(sufixo)]
+
+            if aceita(base):
+                achados.append(caminho)
+
+    def sanit(texto):
+        return cfg.sanitizar_nome(texto)
+
+    varrer(cfg.VIDEOS_DIR, lambda b: (
+        os.path.splitext(b)[1].lower() in cfg.VIDEOS_SUPORTADOS
+        and sanit(os.path.splitext(b)[0]) == nome))
+    varrer(cfg.AUDIOS_DIR, lambda b: (
+        os.path.splitext(b)[1].lower() in cfg.AMOSTRAS_SUPORTADAS
+        and sanit(os.path.splitext(b)[0]) == nome))
+    varrer(cfg.TRANS_DIR, lambda b: (
+        b.endswith(".txt") and not b.endswith(("_diarizado.txt", "_resumo.txt"))
+        and sanit(b[: -len(".txt")]) == nome))
+    varrer(cfg.DIARIZ_DIR, lambda b: (
+        b.endswith("_diarizado.txt") and sanit(b[: -len("_diarizado.txt")]) == nome))
+    varrer(cfg.RESUMOS_DIR, lambda b: (
+        b.endswith("_resumo.txt") and sanit(b[: -len("_resumo.txt")]) == nome))
+
+    saida = []
+
+    for c in achados:
+
+        try:
+            tamanho = os.path.getsize(c)
+        except OSError:
+            tamanho = 0
+
+        saida.append({"caminho": c, "arquivo": os.path.basename(c),
+                      "pasta": os.path.basename(os.path.dirname(c)),
+                      "tamanho": tamanho})
+
+    return saida
+
+
+def deletar_parado(nome):
+    """Apaga os arquivos intermediários de um item parado. Recusa se o item
+    já foi concluído (os arquivos finais em 6_Concluidos nunca são tocados)
+    ou se há uma execução em andamento."""
+
+    if not _nome_valido(nome):
+        raise ValueError("nome inválido")
+
+    if execucao_ativa():
+        raise PermissionError(
+            "há uma execução em andamento — termine ou cancele antes de deletar")
+
+    if os.path.isdir(os.path.join(cfg.DONE_DIR, nome)):
+        raise ValueError("este item já está concluído; não é um item parado")
+
+    arquivos = arquivos_do_item(nome)
+
+    removidos = []
+    falhas = []
+
+    for a in arquivos:
+
+        try:
+            os.remove(a["caminho"])
+            removidos.append(a["arquivo"])
+        except OSError as e:
+            falhas.append(f"{a['arquivo']}: {e}")
+
+    restaurar_parado(nome)   # some também da lista de ocultos, se estava
+
+    return {
+        "removidos": removidos,
+        "falhas": falhas,
+        "bytes": sum(a["tamanho"] for a in arquivos if a["arquivo"] in removidos),
+    }
 
 
 def _planejar_item(item, etapas):

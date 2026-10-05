@@ -74,7 +74,13 @@ execução interrompida e no início de toda execução.
 O pipeline nunca conhece a pasta do usuário. O portal copia (ou cria atalho, se
 `portal_hardlink`) o necessário para `dados/1_Videos` ou `dados/2_Audios`,
 gravando em `.copiando` e renomeando no fim. Itens que ficaram a meio caminho
-são listados na tela *Nova execução* para continuar ou deixar.
+são listados na tela *Nova execução* (desmarcados) para continuar ou deixar.
+Duas ações por item, **sempre iniciadas pelo usuário**: *Remover da lista*
+(grava o nome em `_portal/ocultos.json`; nenhum arquivo é tocado) e *Deletar
+arquivos* (`deletar_parado`: apaga só os artefatos do item nas pastas de
+trabalho — localizados por varredura, nunca montando caminho a partir do nome —,
+exige `confirmar:true` no POST e recusa itens já concluídos ou com execução em
+andamento).
 
 ## Processos
 

@@ -3,5 +3,8 @@
   "hf_token": "COLE_SEU_TOKEN_DA_HUGGING_FACE_AQUI",
   "modelo_whisper": "small",
   "device": "cuda",
-  "ollama_modelo": "qwen2.5:3b-instruct"
+  "ollama_modelo": "qwen2.5:3b-instruct",
+  "portal_porta": 8765,
+  "portal_hardlink": false,
+  "ca_bundle": ""
 }

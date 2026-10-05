@@ -349,9 +349,12 @@
 
     desenharControles();
 
-    app.replaceChildren(
+    trocar(app,
       h("h1", {}, "Nova execução"),
       h("p", { class: "sub" }, "Aponte uma pasta, escolha as etapas e acompanhe cada arquivo. A pasta de origem nunca é alterada: os arquivos são copiados para a área de trabalho."),
+      config.modelo_em_cache ? null : h("div", { class: "aviso-faixa" },
+        `O modelo de transcrição "${config.modelo_whisper}" ainda não está neste computador: ele será baixado da internet na primeira transcrição (~500 MB). ` +
+        "Se a rede bloquear (erro de certificado), rode Diagnostico_Rede.bat ou leve o modelo de outro computador com transferir_modelo.py (veja o README)."),
       h("div", { class: "cartao" },
         h("h2", {}, "1. Pasta de origem"),
         h("div", { class: "linha" }, campoPasta,

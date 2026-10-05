@@ -201,8 +201,11 @@ def etapa_modelo_whisper(modelo):
     if codigo != 0:
         print()
         print("  AVISO: não foi possível baixar o modelo agora.")
-        print("  Verifique a conexão com a internet (e proxy/VPN da empresa)")
-        print("  e rode o Instalar.bat de novo — ele retoma de onde parou.")
+        print("  Causa comum: antivírus (Kaspersky, ESET...) ou proxy da empresa")
+        print("  inspecionando o HTTPS (erro 'self-signed certificate').")
+        print("  Rode o Diagnostico_Rede.bat: ele mostra a causa e o que fazer.")
+        print("  Saída sem internet: leve o modelo de outro computador com")
+        print("  'python transferir_modelo.py importar modelo_small.zip'.")
 
 
 def etapa_pastas():

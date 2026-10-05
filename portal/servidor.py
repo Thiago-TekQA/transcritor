@@ -144,6 +144,7 @@ async def config(request):
         "device": c.get("device"),
         "ollama_modelo": c.get("ollama_modelo"),
         "tem_token_hf": bool(c.get("hf_token")),
+        "modelo_em_cache": cfg.modelo_em_cache(c.get("modelo_whisper")),
         "base_dir": cfg.BASE_DIR,
         "hardlink": bool(c.get("portal_hardlink")),
         "etapas": [

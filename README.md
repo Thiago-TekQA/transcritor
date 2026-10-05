@@ -94,6 +94,7 @@ nem entra no pacote** — guarda o token da Hugging Face.
 | `ollama_modelo` | `qwen2.5:3b-instruct` | modelo do resumo |
 | `portal_porta` | `8765` | porta do portal |
 | `portal_hardlink` | `false` | usa atalho em vez de copiar, se na mesma unidade |
+| `ca_bundle` | `""` | caminho de um `.pem` com o certificado raiz do antivírus/empresa |
 
 ## Estrutura
 
@@ -122,10 +123,30 @@ Pastas de trabalho (criadas na instalação): `1_Videos`, `2_Audios`,
 
 ## Problemas comuns
 
-- **`self-signed certificate in certificate chain`** (rede corporativa): o
-  `pip-system-certs` (já no `requirements.txt`) faz o Python usar os
-  certificados do Windows. O worker de transcrição também usa o modelo já
-  baixado, sem acessar a internet.
+### `self-signed certificate in certificate chain` ao baixar o modelo
+
+A primeira transcrição baixa o modelo (~500 MB) de huggingface.co. Se um
+**antivírus** (Kaspersky, ESET, Avast…) ou o **proxy da empresa** inspeciona o
+HTTPS, ele reassina o certificado e o Python não confia nele. Rode
+**`Diagnostico_Rede.bat`**: ele mostra quem assina o certificado e o que fazer.
+Soluções, da mais simples à mais manual:
+
+1. **`pip-system-certs`** (já no `requirements.txt`) faz o Python usar os
+   certificados do Windows. Se faltar:
+   `.venv\Scripts\python.exe -m pip install pip-system-certs`
+2. **Certificado raiz da empresa/antivírus**: exporte-o em Base64 (`.pem`) e
+   informe em `config.json`: `"ca_bundle": "C:\pasta\empresa.pem"`.
+3. **Sem internet no destino**: leve o modelo de um computador que já o tenha.
+   Na origem: `python transferir_modelo.py exportar small` (gera
+   `modelo_small.zip`); no destino: `python transferir_modelo.py importar modelo_small.zip`.
+   A partir daí a transcrição roda 100% offline (o worker usa o modelo local
+   primeiro e só vai à rede se ele não existir).
+
+O portal avisa na tela *Nova execução* quando o modelo ainda não está no
+computador.
+
+### Outros
+
 - **Falha na GPU**: o arquivo é retentado na CPU; o motivo aparece no portal.
 - **Versões de pacotes**: o `requirements.txt` fixa as versões validadas
   (a pilha de IA já quebrou por atualização, ex.: `av`). Não atualize sem testar.

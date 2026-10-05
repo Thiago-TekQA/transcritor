@@ -27,6 +27,7 @@ CONFIG_PADRAO = {
     "ollama_modelo": "qwen2.5:3b-instruct",
     "portal_porta": 8765,
     "portal_hardlink": False,
+    "ca_bundle": "",
 }
 
 
@@ -49,6 +50,51 @@ def carregar_config():
 
 
 CONFIG = carregar_config()
+
+# Rede corporativa que reassina o HTTPS: se o config.json aponta um arquivo
+# .pem com o certificado raiz da empresa, todo código Python (inclusive os
+# workers, que herdam o ambiente) passa a confiar nele.
+if CONFIG.get("ca_bundle"):
+
+    for _var in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"):
+        os.environ[_var] = CONFIG["ca_bundle"]
+
+
+def pasta_cache_hf():
+    """Pasta onde o Hugging Face guarda os modelos baixados."""
+
+    if os.environ.get("HF_HUB_CACHE"):
+        return os.environ["HF_HUB_CACHE"]
+
+    if os.environ.get("HF_HOME"):
+        return os.path.join(os.environ["HF_HOME"], "hub")
+
+    return os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+
+
+def modelo_em_cache(modelo):
+    """True se o modelo de transcrição já está neste computador (então a
+    transcrição não precisa de internet). `modelo` pode ser o nome
+    (small, medium…) ou o caminho de uma pasta com o modelo."""
+
+    if not modelo:
+        return False
+
+    if os.path.isdir(modelo):
+        return True
+
+    pasta = os.path.join(
+        pasta_cache_hf(), f"models--Systran--faster-whisper-{modelo}",
+        "snapshots"
+    )
+
+    if not os.path.isdir(pasta):
+        return False
+
+    return any(
+        os.path.exists(os.path.join(pasta, snap, "model.bin"))
+        for snap in os.listdir(pasta)
+    )
 
 BASE_DIR = CONFIG["base_dir"] or PASTA_SCRIPTS
 

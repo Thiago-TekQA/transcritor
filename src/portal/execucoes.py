@@ -891,6 +891,7 @@ def _iniciar_pipeline(run_id, run_dir, params):
 
     env["PYTHONUTF8"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"   # sem __pycache__ na árvore
     env["TRANSCRITOR_EVENTOS"] = os.path.join(run_dir, "eventos.jsonl")
     env["TRANSCRITOR_PARAR"] = os.path.join(run_dir, "parar.flag")
 

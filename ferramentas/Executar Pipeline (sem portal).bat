@@ -9,6 +9,9 @@ echo.
 echo Coloque os videos/audios em dados\1_Videos antes de executar.
 echo.
 
+rem Não deixa __pycache__ espalhado pela árvore do projeto.
+set PYTHONDONTWRITEBYTECODE=1
+
 rem Usa o ambiente virtual criado pelo Instalar.bat, se existir.
 rem Modelo e dispositivo (cuda/cpu) vem do config.json.
 set PYEXE=python

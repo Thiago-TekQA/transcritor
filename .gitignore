@@ -22,6 +22,9 @@ __pycache__/
 /_modelos/
 /perfis_voz.json
 
+# Artefatos gerados (pacote zip, modelo exportado)
+/dist/
+
 # Temporários
 *.parcial
 *.copiando

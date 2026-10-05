@@ -10,7 +10,8 @@ import os
 import zipfile
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SAIDA = os.path.join(RAIZ, "Transcritor_pacote.zip")
+DIST = os.path.join(RAIZ, "dist")   # artefatos gerados ficam fora da raiz
+SAIDA = os.path.join(DIST, "Transcritor_pacote.zip")
 
 ARQUIVOS_RAIZ = [
     "README.md",
@@ -23,12 +24,15 @@ ARQUIVOS_RAIZ = [
 PASTAS = ["src", "ferramentas", "docs", "assets"]
 
 IGNORAR_PASTAS = {"__pycache__"}
+# (dist/ não está em PASTAS, então os zips gerados nunca entram no pacote)
 IGNORAR_SUFIXOS = (".pyc", ".log", ".zip")
 
 
 def main():
 
     incluidos = []
+
+    os.makedirs(DIST, exist_ok=True)
 
     with zipfile.ZipFile(SAIDA, "w", zipfile.ZIP_DEFLATED) as z:
 

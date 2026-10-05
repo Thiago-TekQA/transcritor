@@ -76,13 +76,20 @@ src/          código do programa
   transcrever_arquivo.py  diarizar_arquivo.py  extrair_embeddings_voz.py   workers isolados
   diagnostico_rede.py  transferir_modelo.py                               usados pela tela Ambiente
   portal/                      servidor web (aiohttp) + interface (HTML/CSS/JS puro)
-ferramentas/  instalar.py, gerar_pacote.py e .bat auxiliares
+ferramentas/  instalar.py, gerar_pacote.py, migrar_para_dados.py e .bat auxiliares
 docs/         instalação, linha de comando, arquitetura
 tests/        testes unitários     assets/  ícone
 ```
 
-Na máquina de quem usa (nada disso vai para o Git): `config.json`, `.venv/` e
-`dados/` (`1_Videos` … `8_Resumos`, `_portal`, `_modelos`, `perfis_voz.json`).
+Na máquina de quem usa (nada disso vai para o Git): `config.json`, `.venv/`,
+`dados/` (`1_Videos` … `8_Resumos`, `_portal`, `_modelos`, `perfis_voz.json`) e
+`dist/` (pacote `.zip` e modelo exportado, quando gerados).
+
+**A raiz fica limpa ao trabalhar:** tudo o que o programa produz vai para
+`dados/` ou `dist/`; `__pycache__` não é criado (`PYTHONDONTWRITEBYTECODE`);
+`tests/teste_estrutura.py` verifica isso. Se a sua instalação ainda tem as
+pastas numeradas soltas na raiz, a tela **Ambiente** avisa e
+`ferramentas\Migrar_para_dados.bat` as move para `dados/` (com simulação antes).
 
 ## Configuração (`config.json`)
 

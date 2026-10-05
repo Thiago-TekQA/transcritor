@@ -32,6 +32,7 @@ def _env():
     env = dict(os.environ)
     env["PYTHONUTF8"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     env["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
     return env

@@ -92,6 +92,13 @@ def coletar():
     except importlib.metadata.PackageNotFoundError:
         d["pip_system_certs"] = None
 
+    # layout das pastas de trabalho: direto na raiz (antigo) ou em dados/
+    d["layout"] = {
+        "base_dir": cfg.BASE_DIR,
+        "legado": os.path.normcase(os.path.normpath(cfg.BASE_DIR))
+        == os.path.normcase(os.path.normpath(cfg.PASTA_RAIZ)),
+    }
+
     ca = cfg.CONFIG.get("ca_bundle")
     d["ca_bundle"] = {
         "caminho": ca or "",
@@ -248,7 +255,7 @@ def imprimir(d):
         print("  [3] Alternativa sem internet: leve o modelo de outro computador que")
         print("      já o tenha baixado.")
         print(f"      Computador de origem:  python transferir_modelo.py exportar {m['nome']}")
-        print(f"      Este computador:       python transferir_modelo.py importar modelo_{m['nome']}.zip")
+        print(f"      Este computador:       python transferir_modelo.py importar <caminho>\\modelo_{m['nome']}.zip")
         print("      Depois disso a transcrição funciona totalmente offline.")
 
 

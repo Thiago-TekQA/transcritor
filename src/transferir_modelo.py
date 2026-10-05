@@ -1,8 +1,8 @@
 """Leva o modelo de transcrição (Whisper) de um computador para outro,
 sem precisar de internet no destino.
 
-  Origem:   python transferir_modelo.py exportar small    -> cria modelo_small.zip
-  Destino:  python transferir_modelo.py importar modelo_small.zip
+  Origem:   python transferir_modelo.py exportar small    -> cria dist/modelo_small.zip
+  Destino:  python transferir_modelo.py importar caminho\\para\\modelo_small.zip
 """
 
 import os
@@ -24,7 +24,10 @@ def exportar(modelo):
         sys.exit(f"O modelo '{modelo}' não está baixado neste computador "
                  f"({pasta}). Rode uma transcrição com internet antes.")
 
-    saida = f"modelo_{modelo}.zip"
+    # zips gerados ficam em dist/ (fora da raiz do projeto)
+    os.makedirs(os.path.join(cfg.PASTA_RAIZ, "dist"), exist_ok=True)
+
+    saida = os.path.join(cfg.PASTA_RAIZ, "dist", f"modelo_{modelo}.zip")
     base = os.path.dirname(pasta)
 
     with zipfile.ZipFile(saida, "w", zipfile.ZIP_STORED) as z:

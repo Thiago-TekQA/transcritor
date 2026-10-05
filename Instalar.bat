@@ -2,6 +2,9 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 
+rem Não deixa __pycache__ espalhado pela árvore do projeto.
+set PYTHONDONTWRITEBYTECODE=1
+
 where python >nul 2>nul
 if %errorlevel% neq 0 (
     echo Python nao encontrado.

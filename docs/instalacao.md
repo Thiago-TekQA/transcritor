@@ -50,8 +50,8 @@ quem assina o certificado e oferece a correção. Da mais simples à mais manual
    informe em `config.json`: `"ca_bundle": "C:\\pasta\\empresa.pem"`.
 3. **Sem internet no destino**: leve o modelo de um computador que já o tenha.
    Na origem: `python src\transferir_modelo.py exportar small` (gera
-   `modelo_small.zip`); no destino:
-   `python src\transferir_modelo.py importar modelo_small.zip`. A partir daí a
+   `dist\modelo_small.zip`); no destino:
+   `python src\transferir_modelo.py importar caminho\para\modelo_small.zip`. A partir daí a
    transcrição roda 100% offline (o worker usa o modelo local primeiro).
 
 ### Falha na GPU
@@ -71,6 +71,15 @@ direto na raiz e tinham os `.py` soltos nela. Para atualizar sem perder dados:
    continuam sendo usados. (Se a pasta antiga for a própria raiz da nova
    instalação, o layout antigo é detectado sozinho.)
 3. Rode `Instalar.bat` (recria o `.venv`; o pip reaproveita o cache).
+
+### Organizando as pastas antigas em `dados/`
+Se as pastas numeradas (`1_Videos`…`8_Resumos`, `_portal`) estão soltas na raiz,
+a tela **Ambiente** mostra "Pastas de trabalho: layout antigo". Para organizá-las:
+**feche o portal** e execute `ferramentas\Migrar_para_dados.bat` — ele mostra o
+que vai mover, pede confirmação e só então move (é renomear, instantâneo, sem
+copiar). Recusa-se a rodar com pipeline/portal em execução ou se `dados/` já
+tiver conteúdo e, se algo falhar no meio, desfaz o que já tinha movido.
+Linha de comando: `python ferramentas\migrar_para_dados.py [--executar]`.
 
 Alternativa: extrair por cima e apagar da raiz antiga os `.py`/`.bat` soltos
 (`pipeline_*.py`, `transcrever_arquivo.py`, `diarizar_arquivo.py`,

@@ -906,6 +906,10 @@
             o.tem_modelo ? (o.rodando ? "Pronto." : "Pronto — o Ollama é ligado automaticamente na etapa de resumo.") :
               "Falta baixar o modelo do resumo (~2 GB).",
           o.instalado && !o.tem_modelo ? btn("Baixar modelo do resumo", "baixar_ollama") : null),
+        linha(diag.layout.legado ? "atencao" : "ok", "Pastas de trabalho",
+          diag.layout.legado
+            ? "Estão direto na raiz do projeto (layout antigo), misturadas com os arquivos do programa. Para organizar em dados/: feche o portal e execute ferramentas\\Migrar_para_dados.bat."
+            : `Organizadas em ${diag.layout.base_dir}`),
         linha("info", "Python", `${diag.python}${diag.venv ? " (ambiente virtual)" : ""} — ${diag.executavel}`),
       ].filter(Boolean);
 

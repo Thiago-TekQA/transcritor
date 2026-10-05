@@ -112,7 +112,9 @@ dados\6_Concluidos\Reuniao_ABC\
 `dados\` contém `1_Videos`, `2_Audios`, `3_Transcricoes`, `4_Diarizacoes`,
 `5_Logs`, `6_Concluidos`, `7_Perfis_Voz`, `8_Resumos`, `_portal` (execuções do
 portal) e `_modelos`. Logs: `dados\5_Logs` (e cópia em cada entregável). Em
-instalações antigas as pastas ficam direto na raiz (layout detectado sozinho).
+instalações antigas as pastas ficam direto na raiz (layout detectado sozinho;
+`ferramentas\Migrar_para_dados.bat` move para `dados\`). Arquivos gerados
+(pacote, modelo exportado) vão para `dist\`.
 
 ## Primeira execução
 

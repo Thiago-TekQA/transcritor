@@ -12,19 +12,25 @@ Tudo roda na própria máquina — nenhum áudio ou texto é enviado para a inte
 ## Instalar
 1. Extraia o projeto (zip gerado por `ferramentas/gerar_pacote.py` ou o download
    do repositório) numa pasta, ex.: `C:\Transcritor`.
-2. Dê duplo clique em **`Instalar.bat`** e acompanhe (8 etapas):
+2. Dê duplo clique em **`Instalar Transcritor`** (ícone com a seta verde) e
+   acompanhe (8 etapas):
    Python, FFmpeg, GPU, ambiente `.venv`, dependências (versões fixadas),
    Ollama + modelo de resumo, `config.json`, modelo de transcrição, pasta
    `dados/` e atalho **Transcritor** na Área de Trabalho.
    - Instala FFmpeg e Ollama via winget se faltarem. Se pedir para fechar e
      abrir de novo (para o Windows reconhecer), feche a janela e rode o
      `Instalar.bat` outra vez — ele retoma de onde parou.
+   - `Instalar Transcritor.exe` e `Transcritor.exe` são só lançadores com
+     ícone: cada um chama o `.bat` ao lado (`Instalar.bat` / `Portal.bat`).
+     Se o Windows ou o antivírus barrar o `.exe` ("O Windows protegeu o
+     computador"), abra o `.bat` direto — faz exatamente o mesmo.
 3. Token da Hugging Face: **opcional** (só para diarização, que vem desligada).
    Para usá-la, aceite os termos do modelo `pyannote/speaker-diarization-community-1`
    com a mesma conta do token.
 
 ## Usar
-Abra o atalho **Transcritor** (ou `Portal.bat`). Resultados em
+Abra o atalho **Transcritor** (ou o `Transcritor` da pasta, ou `Portal.bat`).
+Resultados em
 `dados\6_Concluidos\<reunião>\` (transcrição + resumo); cópia dos resumos em
 `dados\8_Resumos`. Sem portal: `ferramentas\Executar Pipeline (sem portal).bat`.
 

@@ -17,6 +17,9 @@ ARQUIVOS_RAIZ = [
     "README.md",
     "Instalar.bat",
     "Portal.bat",
+    # lançadores com ícone (ferramentas/gerar_lancadores.py)
+    "Instalar Transcritor.exe",
+    "Transcritor.exe",
     "requirements.txt",
     "config.exemplo.json",
 ]

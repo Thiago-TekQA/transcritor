@@ -4,3 +4,6 @@
 *.css text eol=lf
 *.html text eol=lf
 *.md text eol=lf
+*.cs text eol=lf
+*.exe binary
+*.ico binary

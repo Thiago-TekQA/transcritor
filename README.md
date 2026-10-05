@@ -24,11 +24,13 @@ combinação). O que já foi feito é pulado automaticamente.
 ## Início rápido (Windows 10/11)
 
 1. Instale o **Python 3.13** (python.org, marcando *Add to PATH*).
-2. Baixe/extraia o projeto e dê duplo clique em **`Instalar.bat`**. Ele instala
+2. Baixe/extraia o projeto e dê duplo clique em **`Instalar Transcritor`**
+   (o ícone com a seta verde; equivale ao `Instalar.bat`). Ele instala
    FFmpeg e Ollama (via winget), cria o ambiente `.venv` com as versões
    fixadas, baixa os modelos, cria a pasta `dados/` e um atalho
    **Transcritor** na Área de Trabalho.
-3. Abra o atalho (ou **`Portal.bat`**): o navegador abre em
+3. Abra o atalho (ou o **`Transcritor`** da pasta, ou `Portal.bat`): o
+   navegador abre em
    <http://127.0.0.1:8765>.
 
 Requisitos, rede corporativa/antivírus e atualização de instalações antigas:

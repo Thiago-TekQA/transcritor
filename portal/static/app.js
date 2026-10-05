@@ -354,7 +354,7 @@
       h("p", { class: "sub" }, "Aponte uma pasta, escolha as etapas e acompanhe cada arquivo. A pasta de origem nunca é alterada: os arquivos são copiados para a área de trabalho."),
       config.modelo_em_cache ? null : h("div", { class: "aviso-faixa" },
         `O modelo de transcrição "${config.modelo_whisper}" ainda não está neste computador: ele será baixado da internet na primeira transcrição (~500 MB). ` +
-        "Se a rede bloquear (erro de certificado), rode Diagnostico_Rede.bat ou leve o modelo de outro computador com transferir_modelo.py (veja o README)."),
+        "Se a rede bloquear (erro de certificado), ", h("a", { href: "#/ambiente" }, "abra a tela Ambiente"), " para verificar e corrigir (certificados, download ou importação do modelo)."),
       h("div", { class: "cartao" },
         h("h2", {}, "1. Pasta de origem"),
         h("div", { class: "linha" }, campoPasta,
@@ -653,6 +653,111 @@
     carregar();
   }
 
+  // ---------------------------------------------------------------- Ambiente
+
+  function viewAmbiente() {
+    const minhaRota = rotaId;
+    const corpo = h("div", {});
+    const painelTarefa = h("div", {});
+    const campoZip = h("input", { type: "text", class: "campo-pasta",
+      placeholder: "Caminho do arquivo modelo_small.zip (ex.: C:\\Users\\voce\\Downloads\\modelo_small.zip)",
+      "aria-label": "Arquivo do modelo" });
+    let diag = null;
+    let tarefaAnterior = null;
+
+    app.replaceChildren(h("h1", {}, "Ambiente"),
+      h("p", { class: "sub" }, "Verifica o que o transcritor precisa neste computador e corrige o que faltar."),
+      corpo, painelTarefa);
+
+    async function pedir(acao, caminho) {
+      try {
+        await api("/api/ambiente/acao", { method: "POST", corpo: { acao, caminho } });
+        acompanhar();
+      } catch (e) { alert(e.message); }
+    }
+
+    function linha(estado, titulo, detalhe, ...botoes) {
+      const [rot, tipo] = { ok: ["OK", "ok"], falta: ["Falta", "erro"], atencao: ["Atenção", "aviso"], info: ["Info", ""] }[estado];
+      return h("tr", {}, h("td", {}, pilula(rot, tipo)), h("td", { class: "nome" }, titulo,
+        detalhe ? h("div", { class: "sutil" }, detalhe) : null),
+        h("td", {}, h("div", { class: "linha" }, ...botoes.filter(Boolean))));
+    }
+
+    function desenhar() {
+      if (!diag) return;
+      if (diag.erro) {
+        corpo.replaceChildren(h("div", { class: "aviso-faixa erro" }, `Não foi possível verificar: ${diag.erro}`));
+        return;
+      }
+      const ocupado = !!tarefaAnterior && tarefaAnterior.estado === "rodando";
+      const hf = diag.huggingface, m = diag.modelo, o = diag.ollama;
+
+      const btn = (texto, acao) => h("button", { disabled: ocupado, onclick: () => pedir(acao) }, texto);
+
+      const linhas = [
+        linha(diag.ffmpeg ? "ok" : "falta", "FFmpeg (extrai o áudio dos vídeos)",
+          diag.ffmpeg ? "" : "Instale com: winget install Gyan.FFmpeg — depois feche e reabra o portal."),
+        linha(diag.pip_system_certs ? "ok" : (hf.ok ? "info" : "falta"), "Certificados do Windows no Python",
+          diag.pip_system_certs ? `pip-system-certs ${diag.pip_system_certs}` :
+            "Faz o Python confiar no certificado do antivírus/empresa (necessário quando o antivírus inspeciona o HTTPS).",
+          diag.pip_system_certs ? null : btn("Instalar suporte a certificados", "instalar_certs")),
+        linha(hf.ok ? "ok" : "falta", "Acesso ao Hugging Face (baixar o modelo)",
+          hf.ok ? "Conexão normal." :
+            hf.ssl ? `Bloqueado por certificado não confiável — assinado por: ${hf.emissor}. ` +
+              "Instale o suporte a certificados acima; se continuar, informe o certificado raiz em config.json (ca_bundle) ou importe o modelo de um arquivo."
+              : `Sem acesso: ${hf.erro}`),
+        linha(m.em_cache ? "ok" : "falta", `Modelo de transcrição "${m.nome}"`,
+          m.em_cache ? `Já está neste computador (${m.pasta}) — transcreve sem internet.` : "Ainda não está neste computador (~500 MB).",
+          m.em_cache ? null : btn("Baixar agora", "baixar_modelo")),
+        m.em_cache ? null : h("tr", {}, h("td", {}), h("td", { class: "nome" }, "Ou importe de um arquivo",
+          h("div", { class: "sutil" }, "Gere o .zip em outro computador com: python transferir_modelo.py exportar " + m.nome)),
+          h("td", {}, h("div", { class: "linha" }, campoZip,
+            h("button", { disabled: ocupado, onclick: () => pedir("importar_modelo", campoZip.value) }, "Importar")))),
+        linha(o.instalado && o.tem_modelo ? "ok" : (o.instalado ? "atencao" : "falta"), `Ollama e modelo de resumo "${o.modelo_alvo}"`,
+          !o.instalado ? "Ollama não está instalado: winget install Ollama.Ollama" :
+            o.tem_modelo ? (o.rodando ? "Pronto." : "Pronto — o Ollama é ligado automaticamente na etapa de resumo.") :
+              "Falta baixar o modelo do resumo (~2 GB).",
+          o.instalado && !o.tem_modelo ? btn("Baixar modelo do resumo", "baixar_ollama") : null),
+        linha("info", "Python", `${diag.python}${diag.venv ? " (ambiente virtual)" : ""} — ${diag.executavel}`),
+      ].filter(Boolean);
+
+      corpo.replaceChildren(h("div", { class: "cartao" },
+        h("div", { class: "linha", style: "margin-bottom:10px" }, h("h2", { style: "margin:0" }, "Verificações"),
+          h("span", { class: "espaco" }), h("button", { disabled: ocupado, onclick: verificar }, "Verificar de novo")),
+        h("div", { class: "tabela-rolagem" }, h("table", {}, h("tbody", {}, linhas)))));
+    }
+
+    async function verificar() {
+      corpo.replaceChildren(h("div", { class: "vazio" }, "Verificando… (pode levar alguns segundos)"));
+      try {
+        diag = await api("/api/ambiente");
+      } catch (e) { diag = { erro: e.message }; }
+      if (minhaRota !== rotaId) return;
+      desenhar();
+    }
+
+    async function acompanhar() {
+      if (minhaRota !== rotaId) return;
+      let t;
+      try { t = await api("/api/ambiente/tarefa"); } catch (_) { timers.push(setTimeout(acompanhar, 2000)); return; }
+      if (minhaRota !== rotaId) return;
+      const terminou = !!tarefaAnterior && tarefaAnterior.estado === "rodando" && t.estado !== "rodando";
+      tarefaAnterior = t;
+      if (t.estado === "ocioso") { painelTarefa.replaceChildren(); desenhar(); return; }
+      const rot = { rodando: ["Em andamento", "rodando"], ok: ["Concluído", "ok"], erro: ["Falhou", "erro"] }[t.estado];
+      const pre = h("pre", { class: "log" }, t.texto || "…");
+      painelTarefa.replaceChildren(h("div", { class: "cartao" }, h("div", { class: "linha", style: "margin-bottom:10px" },
+        h("h2", { style: "margin:0" }, `Correção: ${t.acao}`), pilula(rot[0], rot[1])), pre));
+      pre.scrollTop = pre.scrollHeight;
+      if (t.estado === "rodando") { desenhar(); timers.push(setTimeout(acompanhar, 1000)); }
+      else if (terminou) verificar();
+      else desenhar();
+    }
+
+    verificar();
+    acompanhar();
+  }
+
   // ---------------------------------------------------------------- roteador
 
   function marcarMenu(rota) {
@@ -683,6 +788,7 @@
     if (rota === "execucao" && partes[1]) viewExecucao(partes[1]);
     else if (rota === "execucoes") viewExecucoes();
     else if (rota === "resultados") viewResultados();
+    else if (rota === "ambiente") viewAmbiente();
     else viewNova();
     atualizarAtiva();
   }

@@ -63,6 +63,11 @@ Duplo clique em **`Portal.bat`** (ou `python portal/servidor.py`) e abra
    *Parar após o arquivo atual*, *Cancelar agora* e *Retomar*.
 3. **Resultados**: reuniões concluídas e parciais; abre resumo, transcrição
    e log.
+4. **Ambiente**: verifica o que o computador precisa (FFmpeg, certificados do
+   Windows, acesso ao Hugging Face, modelo de transcrição, Ollama e modelo do
+   resumo) e **corrige com um clique**: instalar o suporte a certificados,
+   baixar o modelo de transcrição, importá-lo de um `.zip` ou baixar o modelo
+   do resumo. É o primeiro lugar a olhar se algo falhar numa máquina nova.
 
 A pasta de origem **nunca é alterada**: os arquivos são copiados para a área
 de trabalho. Fechar o portal **não interrompe** uma execução em andamento; ao
@@ -127,15 +132,16 @@ Pastas de trabalho (criadas na instalação): `1_Videos`, `2_Audios`,
 
 A primeira transcrição baixa o modelo (~500 MB) de huggingface.co. Se um
 **antivírus** (Kaspersky, ESET, Avast…) ou o **proxy da empresa** inspeciona o
-HTTPS, ele reassina o certificado e o Python não confia nele. Rode
-**`Diagnostico_Rede.bat`**: ele mostra quem assina o certificado e o que fazer.
-Soluções, da mais simples à mais manual:
+HTTPS, ele reassina o certificado e o Python não confia nele. Abra a tela
+**Ambiente** do portal (ou rode `Diagnostico_Rede.bat`): ela mostra quem assina
+o certificado e oferece a correção. Soluções, da mais simples à mais manual:
 
 1. **`pip-system-certs`** (já no `requirements.txt`) faz o Python usar os
-   certificados do Windows. Se faltar:
+   certificados do Windows. Se faltar, use o botão *Instalar suporte a
+   certificados* na tela Ambiente ou:
    `.venv\Scripts\python.exe -m pip install pip-system-certs`
 2. **Certificado raiz da empresa/antivírus**: exporte-o em Base64 (`.pem`) e
-   informe em `config.json`: `"ca_bundle": "C:\pasta\empresa.pem"`.
+   informe em `config.json`: `"ca_bundle": "C:\\pasta\\empresa.pem"`.
 3. **Sem internet no destino**: leve o modelo de um computador que já o tenha.
    Na origem: `python transferir_modelo.py exportar small` (gera
    `modelo_small.zip`); no destino: `python transferir_modelo.py importar modelo_small.zip`.

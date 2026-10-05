@@ -28,3 +28,4 @@ __pycache__/
 *.zip
 ev_teste.jsonl
 .pipeline.lock
+/_cache*/

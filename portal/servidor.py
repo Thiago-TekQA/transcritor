@@ -24,6 +24,7 @@ from aiohttp import web  # noqa: E402
 
 import pipeline_config as cfg  # noqa: E402
 import execucoes as ex  # noqa: E402
+import ambiente as amb  # noqa: E402
 
 PORTA = int(cfg.CONFIG.get("portal_porta") or 8765)
 HOSTS_OK = {f"127.0.0.1:{PORTA}", f"localhost:{PORTA}"}
@@ -152,6 +153,29 @@ async def config(request):
             for e in cfg.ETAPAS_VALIDAS
         ],
     })
+
+
+async def ambiente_verificar(request):
+
+    return _json(await _bloqueante(amb.verificar))
+
+
+async def ambiente_acao(request):
+
+    d = await _corpo(request)
+
+    try:
+        await _bloqueante(amb.iniciar_acao, d.get("acao", ""), d.get("caminho"))
+        return _json({"ok": True})
+    except PermissionError as e:
+        return _erro(str(e), 409)
+    except ValueError as e:
+        return _erro(str(e))
+
+
+async def ambiente_tarefa(request):
+
+    return _json(amb.estado_tarefa())
 
 
 async def pastas(request):
@@ -322,6 +346,9 @@ def criar_app():
 
     app.router.add_get("/api/ping", ping)
     app.router.add_get("/api/config", config)
+    app.router.add_get("/api/ambiente", ambiente_verificar)
+    app.router.add_post("/api/ambiente/acao", ambiente_acao)
+    app.router.add_get("/api/ambiente/tarefa", ambiente_tarefa)
     app.router.add_get("/api/pastas", pastas)
     app.router.add_post("/api/plano", plano)
 

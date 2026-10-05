@@ -212,7 +212,7 @@ def etapa_modelo_whisper(modelo):
         print("  inspecionando o HTTPS (erro 'self-signed certificate').")
         print("  Rode o Diagnostico_Rede.bat: ele mostra a causa e o que fazer.")
         print("  Saída sem internet: leve o modelo de outro computador com")
-        print("  'python transferir_modelo.py importar modelo_small.zip'.")
+        print("  'python src\transferir_modelo.py importar <caminho>\modelo_small.zip'.")
 
 
 def etapa_pastas():

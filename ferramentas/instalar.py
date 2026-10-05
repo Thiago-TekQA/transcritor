@@ -14,7 +14,11 @@ import sys
 import time
 import urllib.request
 
-PASTA = os.path.dirname(os.path.abspath(__file__))
+PASTA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # raiz
+sys.path.insert(0, os.path.join(PASTA, "src"))
+
+import pipeline_config as cfg  # noqa: E402  (só stdlib; seguro antes do venv)
+
 VENV = os.path.join(PASTA, ".venv")
 VENV_PYTHON = os.path.join(VENV, "Scripts", "python.exe")
 CONFIG = os.path.join(PASTA, "config.json")
@@ -26,6 +30,9 @@ PASTAS = [
     "1_Videos", "2_Audios", "3_Transcricoes", "4_Diarizacoes",
     "5_Logs", "6_Concluidos", "7_Perfis_Voz", "8_Resumos",
 ]
+
+ICONE = os.path.join(PASTA, "assets", "icone.ico")
+PORTAL_BAT = os.path.join(PASTA, "Portal.bat")
 
 
 def titulo(texto):
@@ -68,7 +75,7 @@ def winget_instalar(pacote_id, nome):
 
 
 def etapa_python():
-    titulo("1/8  Python")
+    titulo("1/9  Python")
     v = sys.version_info
     print(f"  Python {v.major}.{v.minor}.{v.micro}")
     if (v.major, v.minor) < (3, 10) or (v.major, v.minor) > (3, 13):
@@ -77,7 +84,7 @@ def etapa_python():
 
 
 def etapa_ffmpeg():
-    titulo("2/8  FFmpeg")
+    titulo("2/9  FFmpeg")
     if shutil.which("ffmpeg"):
         print("  FFmpeg encontrado.")
         return
@@ -92,7 +99,7 @@ def etapa_ffmpeg():
 
 
 def etapa_venv():
-    titulo("3/8  Ambiente virtual (.venv)")
+    titulo("3/9  Ambiente virtual (.venv)")
     if os.path.exists(VENV_PYTHON):
         print("  .venv já existe — reaproveitando.")
         return
@@ -102,7 +109,7 @@ def etapa_venv():
 
 
 def etapa_dependencias(gpu):
-    titulo("4/8  Dependências Python (pode levar vários minutos)")
+    titulo("4/9  Dependências Python (pode levar vários minutos)")
     rodar([VENV_PYTHON, "-m", "pip", "install", "--upgrade", "pip"])
 
     if gpu:
@@ -131,7 +138,7 @@ def ollama_no_ar():
 
 
 def etapa_ollama(modelo):
-    titulo("5/8  Ollama + modelo de resumo")
+    titulo("5/9  Ollama + modelo de resumo")
     if not shutil.which("ollama"):
         winget_instalar("Ollama.Ollama", "Ollama")
     if not shutil.which("ollama"):
@@ -164,7 +171,7 @@ def etapa_ollama(modelo):
 
 
 def etapa_config(gpu):
-    titulo("6/8  Configuração (config.json)")
+    titulo("6/9  Configuração (config.json)")
     config = {
         "base_dir": "",
         "hf_token": "",
@@ -191,7 +198,7 @@ def etapa_config(gpu):
 
 
 def etapa_modelo_whisper(modelo):
-    titulo("7/8  Modelo de transcrição (Whisper)")
+    titulo("7/9  Modelo de transcrição (Whisper)")
     print(f"  Baixando o modelo '{modelo}' (~500 MB, só na primeira vez)...")
     codigo = rodar([
         VENV_PYTHON, "-c",
@@ -209,10 +216,68 @@ def etapa_modelo_whisper(modelo):
 
 
 def etapa_pastas():
-    titulo("8/8  Pastas de trabalho")
+    titulo("8/9  Pastas de trabalho")
     for nome in PASTAS:
-        os.makedirs(os.path.join(PASTA, nome), exist_ok=True)
-    print("  Pastas criadas.")
+        os.makedirs(os.path.join(cfg.BASE_DIR, nome), exist_ok=True)
+    print(f"  Pastas criadas em: {cfg.BASE_DIR}")
+
+
+def _ps(texto):
+    """Escapa um texto para literal entre aspas simples do PowerShell."""
+
+    return "'" + str(texto).replace("'", "''") + "'"
+
+
+def criar_atalho(pasta_destino=None):
+    """Cria o atalho "Transcritor" (abre o Portal.bat) com o ícone do
+    projeto. Sem `pasta_destino`, usa a Área de Trabalho do usuário (o
+    Windows informa o caminho certo, mesmo com OneDrive). Devolve o caminho
+    do atalho ou None se não conseguiu."""
+
+    if not os.path.exists(PORTAL_BAT):
+        return None
+
+    destino = (
+        _ps(pasta_destino) if pasta_destino
+        else "[Environment]::GetFolderPath('Desktop')"
+    )
+
+    script = (
+        f"$d = {destino}; "
+        "if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null }; "
+        "$lnk = Join-Path $d 'Transcritor.lnk'; "
+        "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk); "
+        f"$s.TargetPath = {_ps(PORTAL_BAT)}; "
+        f"$s.WorkingDirectory = {_ps(PASTA)}; "
+        f"$s.IconLocation = {_ps(ICONE)}; "
+        "$s.Description = 'Portal do Transcritor'; "
+        "$s.Save(); Write-Output $lnk"
+    )
+
+    try:
+
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True, text=True, timeout=60,
+        )
+
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip().splitlines()[-1]
+
+    except Exception:
+
+        pass
+
+    return None
+
+
+def etapa_atalho():
+    titulo("9/9  Atalho na Área de Trabalho")
+    caminho = criar_atalho()
+    if caminho:
+        print(f"  Atalho criado: {caminho}")
+    else:
+        print("  Não foi possível criar o atalho (sem problema: use o Portal.bat).")
 
 
 def main():
@@ -230,12 +295,13 @@ def main():
     config = etapa_config(gpu)
     etapa_modelo_whisper(config["modelo_whisper"])
     etapa_pastas()
+    etapa_atalho()
 
     titulo("INSTALAÇÃO CONCLUÍDA")
-    print("  Como usar (recomendado): dê duplo clique em 'Portal.bat', aponte")
-    print("  a pasta com os vídeos/áudios e acompanhe cada etapa no navegador.")
-    print("  Alternativa sem portal: coloque os arquivos em 1_Videos e use")
-    print("  'Executar Pipeline.bat'.")
+    print("  Como usar (recomendado): abra o atalho 'Transcritor' (ou o")
+    print("  Portal.bat), aponte a pasta com os vídeos/áudios e acompanhe cada")
+    print("  etapa no navegador.")
+    print("  Alternativa sem portal: ferramentas\\Executar Pipeline (sem portal).bat")
     if config["hf_token"]:
         print()
         print("  Para usar diarização, aceite os termos do modelo")

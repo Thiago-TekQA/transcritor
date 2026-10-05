@@ -15,9 +15,7 @@ import pipeline_config as cfg
 
 EXECUCOES_DIR = os.path.join(cfg.PORTAL_DIR, "execucoes")
 ATIVA_JSON = os.path.join(cfg.PORTAL_DIR, "ativa.json")
-PIPELINE_SCRIPT = os.path.join(
-    cfg.PASTA_SCRIPTS, "pipeline_transcricao_reestruturado.py"
-)
+PIPELINE_SCRIPT = os.path.join(cfg.PASTA_SCRIPTS, "pipeline.py")
 
 ROTULOS_ETAPAS = {
     "mp3": "Gerar áudio",
@@ -102,7 +100,7 @@ def processo_vivo(pid):
 def python_do_pipeline():
 
     venv = os.path.join(
-        cfg.PASTA_SCRIPTS, ".venv", "Scripts", "python.exe"
+        cfg.PASTA_RAIZ, ".venv", "Scripts", "python.exe"
     )
 
     return venv if os.path.exists(venv) else sys.executable

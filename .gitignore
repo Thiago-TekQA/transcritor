@@ -8,6 +8,8 @@ __pycache__/
 *.pyc
 
 # Dados de reuniões e saídas (confidenciais)
+/dados/
+# (layout antigo, com tudo direto na raiz)
 /1_Videos/
 /2_Audios/
 /3_Transcricoes/
@@ -19,13 +21,12 @@ __pycache__/
 /_portal/
 /_modelos/
 /perfis_voz.json
-/OLD/
 
 # Temporários
 *.parcial
 *.copiando
 *.log
 *.zip
-ev_teste.jsonl
 .pipeline.lock
 /_cache*/
+ev_*.jsonl

@@ -10,11 +10,14 @@ import json
 import os
 import time
 
-# Pasta onde estão os scripts (NÃO muda com o base_dir do config.json).
+# Pasta onde estão os scripts (src/) — NÃO muda com o base_dir do config.json.
 PASTA_SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 
+# Raiz do projeto/instalação: onde ficam config.json, .venv e dados/.
+PASTA_RAIZ = os.path.dirname(PASTA_SCRIPTS)
+
 # =========================================================
-# CONFIGURAÇÃO POR MÁQUINA (config.json ao lado dos scripts)
+# CONFIGURAÇÃO POR MÁQUINA (config.json na raiz do projeto)
 # =========================================================
 # Nenhum valor sensível ou específico desta máquina fica no código — o
 # token da Hugging Face, em particular, nunca deve ser escrito aqui.
@@ -35,7 +38,7 @@ def carregar_config():
 
     config = dict(CONFIG_PADRAO)
 
-    caminho = os.path.join(PASTA_SCRIPTS, "config.json")
+    caminho = os.path.join(PASTA_RAIZ, "config.json")
 
     if os.path.exists(caminho):
 
@@ -96,7 +99,25 @@ def modelo_em_cache(modelo):
         for snap in os.listdir(pasta)
     )
 
-BASE_DIR = CONFIG["base_dir"] or PASTA_SCRIPTS
+
+
+def _base_padrao():
+    """Onde ficam as pastas de trabalho (1_Videos … 8_Resumos).
+
+    Padrão: <raiz>/dados. Instalações antigas guardavam tudo direto na raiz;
+    se já existe 6_Concluidos na raiz e ainda não existe dados/, mantém o
+    layout antigo para o usuário não "perder" os dados que já tem."""
+
+    dados = os.path.join(PASTA_RAIZ, "dados")
+    legado = os.path.join(PASTA_RAIZ, "6_Concluidos")
+
+    if os.path.isdir(legado) and not os.path.isdir(dados):
+        return PASTA_RAIZ
+
+    return dados
+
+
+BASE_DIR = CONFIG["base_dir"] or _base_padrao()
 
 VIDEOS_DIR = os.path.join(BASE_DIR, "1_Videos")
 AUDIOS_DIR = os.path.join(BASE_DIR, "2_Audios")

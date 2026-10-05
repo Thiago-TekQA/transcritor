@@ -1,10 +1,11 @@
-"""Testes do estado (reducer) e do planejamento. Rodar: python -m unittest portal.teste_portal"""
+"""Testes do estado (reducer) e do planejamento. Rodar (na raiz): python -m unittest discover tests"""
 import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
+sys.path.insert(0, _SRC)
+sys.path.insert(0, os.path.join(_SRC, "portal"))
 
 import execucoes as ex  # noqa: E402
 

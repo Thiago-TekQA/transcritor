@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-python "instalar.py"
+python "ferramentas\instalar.py"
 
 echo.
 pause

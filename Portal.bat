@@ -6,7 +6,7 @@ rem Usa o ambiente virtual criado pelo Instalar.bat, se existir.
 set PYEXE=python
 if exist ".venv\Scripts\python.exe" set PYEXE=.venv\Scripts\python.exe
 
-"%PYEXE%" "portal\servidor.py"
+"%PYEXE%" "src\portal\servidor.py"
 
 echo.
 pause

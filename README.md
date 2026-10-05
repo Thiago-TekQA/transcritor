@@ -1,8 +1,8 @@
 # Transcritor
 
 Transcrição, resumo e (opcionalmente) identificação de falantes de reuniões
-gravadas, **100% local**: nenhum áudio, vídeo ou texto sai da máquina — nem
-na etapa de resumo, que usa um modelo de linguagem local (Ollama).
+gravadas, **100% local**: nenhum áudio, vídeo ou texto sai da máquina — nem na
+etapa de resumo, que usa um modelo de linguagem local (Ollama).
 
 Você aponta uma pasta com vídeos/áudios, escolhe as etapas e acompanha cada
 arquivo, etapa por etapa, num **portal no navegador** (servido só em
@@ -16,74 +16,64 @@ arquivo, etapa por etapa, num **portal no navegador** (servido só em
 | Transcrição | fala → texto com marcações de tempo | faster-whisper (CUDA ou CPU) |
 | Diarização *(opcional)* | quem falou cada trecho | WhisperX + PyAnnote |
 | Resumo | Resumo, Conclusões, TO-DOs e Pessoas citadas, em português | Ollama (`qwen2.5:3b-instruct`) |
-| Consolidar | move os entregáveis para `6_Concluidos/<reunião>/` e limpa temporários | — |
+| Consolidar | junta os entregáveis em `6_Concluidos/<reunião>/` e limpa temporários | — |
 
-As etapas são **combináveis** (só áudio, só transcrição, tudo, ou qualquer
-combinação). Etapas que já foram feitas são puladas automaticamente.
+As etapas são **combináveis** (só áudio, só transcrição, tudo ou qualquer
+combinação). O que já foi feito é pulado automaticamente.
 
-## Recursos de robustez
+## Início rápido (Windows 10/11)
 
-- Cada transcrição/diarização roda em **processo isolado**: um crash nativo
-  de CUDA derruba só aquele arquivo, não o lote.
-- Se falhar na GPU, o arquivo é **retentado na CPU** automaticamente.
-- **Pausa térmica**: a GPU é pausada acima de 78 °C e retomada abaixo de
-  65 °C, evitando throttling em lotes longos.
-- Resumos de transcrições longas são feitos em blocos e consolidados.
-- Saídas gravadas de forma atômica (`.parcial` → renomeia no fim): um
-  cancelamento nunca deixa arquivo incompleto passando por "pronto".
-- O Ollama só é desligado se foi o próprio pipeline que o ligou.
-- Uma execução por vez (trava de arquivo) — vale também para o `.bat`.
+1. Instale o **Python 3.13** (python.org, marcando *Add to PATH*).
+2. Baixe/extraia o projeto e dê duplo clique em **`Instalar.bat`**. Ele instala
+   FFmpeg e Ollama (via winget), cria o ambiente `.venv` com as versões
+   fixadas, baixa os modelos, cria a pasta `dados/` e um atalho
+   **Transcritor** na Área de Trabalho.
+3. Abra o atalho (ou **`Portal.bat`**): o navegador abre em
+   <http://127.0.0.1:8765>.
 
-## Instalação (Windows 10/11)
+Requisitos, rede corporativa/antivírus e atualização de instalações antigas:
+[`docs/instalacao.md`](docs/instalacao.md).
 
-Requisitos: **Python 3.13** (python.org, marcando *Add to PATH*), ~15 GB livres
-e, de preferência, placa NVIDIA (sem ela roda em CPU, mais devagar).
+## Usando o portal
 
-1. Gere o pacote (`python gerar_pacote.py`) ou clone este repositório.
-2. Dê duplo clique em **`Instalar.bat`**. Ele instala FFmpeg e Ollama (winget),
-   cria o ambiente `.venv` com as versões fixadas, baixa os modelos e cria
-   `config.json`.
-3. O token da Hugging Face é **opcional** (só para diarização).
-
-Detalhes em [`LEIA-ME_INSTALACAO.md`](LEIA-ME_INSTALACAO.md).
-
-## Uso
-
-### Portal (recomendado)
-
-Duplo clique em **`Portal.bat`** (ou `python portal/servidor.py`) e abra
-<http://127.0.0.1:8765>.
-
-1. **Nova execução**: informe/escolha a pasta de origem, marque as etapas
-   (Tudo, Só áudio, Só transcrição, Só resumo, Personalizado) e clique em
-   *Analisar*. O portal mostra, por arquivo e etapa, o que será executado,
-   o que já existe e o que está bloqueado (ex.: transcrição sem áudio).
-2. **Execução**: estado de cada arquivo/etapa ao vivo (progresso da
-   transcrição, falhas, retentativa na CPU, pausa térmica, log). Botões:
-   *Parar após o arquivo atual*, *Cancelar agora* e *Retomar*.
-3. **Resultados**: reuniões concluídas e parciais; abre resumo, transcrição
-   e log.
+1. **Nova execução**: informe/escolha a pasta de origem, marque as etapas (Tudo,
+   Só áudio, Só transcrição, Só resumo, Personalizado) e clique em *Analisar*.
+   O portal mostra, por arquivo e etapa, o que será executado, o que já existe
+   e o que está bloqueado. Itens que ficaram **parados no meio do caminho** em
+   execuções anteriores aparecem numa lista à parte, para você decidir se
+   continuam.
+2. **Execução**: estado ao vivo de cada arquivo/etapa (progresso, falhas,
+   retentativa na CPU, pausa térmica, log). Botões: *Parar após o arquivo
+   atual*, *Cancelar agora* e *Retomar*.
+3. **Resultados**: reuniões concluídas e parciais; abre resumo, transcrição e log.
 4. **Ambiente**: verifica o que o computador precisa (FFmpeg, certificados do
-   Windows, acesso ao Hugging Face, modelo de transcrição, Ollama e modelo do
-   resumo) e **corrige com um clique**: instalar o suporte a certificados,
-   baixar o modelo de transcrição, importá-lo de um `.zip` ou baixar o modelo
-   do resumo. É o primeiro lugar a olhar se algo falhar numa máquina nova.
+   Windows, acesso ao Hugging Face, modelos) e **corrige com um clique**.
 
-A pasta de origem **nunca é alterada**: os arquivos são copiados para a área
-de trabalho. Fechar o portal **não interrompe** uma execução em andamento; ao
-reabrir, ele reconecta.
+A pasta de origem **nunca é alterada**: os arquivos são copiados para a área de
+trabalho. Fechar o portal **não interrompe** uma execução; ao reabrir, ele
+reconecta. Se uma etapa for interrompida, só a saída dela é descartada — vídeo,
+áudio e etapas já concluídas ficam.
 
-### Linha de comando
+Sem o portal: [`docs/linha-de-comando.md`](docs/linha-de-comando.md).
 
-```bash
-python pipeline_transcricao_reestruturado.py --modo simples           # mp3 → transcrição → resumo → consolidar
-python pipeline_transcricao_reestruturado.py --modo completo          # + diarização
-python pipeline_transcricao_reestruturado.py --etapas transcricao,resumo
-python pipeline_transcricao_reestruturado.py --etapas mp3 --itens itens.json
+## Estrutura do repositório
+
+```
+README.md  Instalar.bat  Portal.bat  requirements.txt  config.exemplo.json
+src/          código do programa
+  pipeline.py                  orquestrador das etapas
+  pipeline_config.py           configuração, caminhos, eventos, trava
+  pipeline_comum.py            utilitários de IA (Ollama, GPU, vozes)
+  transcrever_arquivo.py  diarizar_arquivo.py  extrair_embeddings_voz.py   workers isolados
+  diagnostico_rede.py  transferir_modelo.py                               usados pela tela Ambiente
+  portal/                      servidor web (aiohttp) + interface (HTML/CSS/JS puro)
+ferramentas/  instalar.py, gerar_pacote.py e .bat auxiliares
+docs/         instalação, linha de comando, arquitetura
+tests/        testes unitários     assets/  ícone
 ```
 
-`--itens` recebe um JSON com a lista de nomes (sem extensão) a processar.
-Referência completa em [`Manual.md`](Manual.md).
+Na máquina de quem usa (nada disso vai para o Git): `config.json`, `.venv/` e
+`dados/` (`1_Videos` … `8_Resumos`, `_portal`, `_modelos`, `perfis_voz.json`).
 
 ## Configuração (`config.json`)
 
@@ -92,67 +82,24 @@ nem entra no pacote** — guarda o token da Hugging Face.
 
 | Chave | Padrão | Significado |
 |---|---|---|
-| `base_dir` | `""` (pasta dos scripts) | onde ficam `1_Videos` … `8_Resumos` |
+| `base_dir` | `""` (→ `dados/`) | onde ficam as pastas de trabalho |
 | `hf_token` | `""` | token Hugging Face (só diarização) |
 | `modelo_whisper` | `small` | `small` rápido; `medium` mais preciso |
 | `device` | `cuda` | `cuda` ou `cpu` |
 | `ollama_modelo` | `qwen2.5:3b-instruct` | modelo do resumo |
 | `portal_porta` | `8765` | porta do portal |
-| `portal_hardlink` | `false` | usa atalho em vez de copiar, se na mesma unidade |
-| `ca_bundle` | `""` | caminho de um `.pem` com o certificado raiz do antivírus/empresa |
-
-## Estrutura
-
-```
-pipeline_config.py                     config, caminhos, eventos, trava (leve)
-pipeline_comum.py                      utilitários de IA (Ollama, GPU, vozes)
-pipeline_transcricao_reestruturado.py  orquestrador das etapas
-transcrever_arquivo.py / diarizar_arquivo.py / extrair_embeddings_voz.py   workers isolados
-portal/servidor.py                     API + páginas (aiohttp, só 127.0.0.1)
-portal/execucoes.py                    plano, cópia, execução, estado
-portal/static/                         interface (HTML/CSS/JS puro)
-instalar.py, Instalar.bat, requirements.txt, gerar_pacote.py   instalação e pacote
-```
-
-Pastas de trabalho (criadas na instalação): `1_Videos`, `2_Audios`,
-`3_Transcricoes`, `4_Diarizacoes`, `5_Logs`, `6_Concluidos`, `7_Perfis_Voz`,
-`8_Resumos` e `_portal` (execuções do portal). Nada disso vai para o Git.
+| `portal_hardlink` | `false` | atalho em vez de cópia, se na mesma unidade |
+| `ca_bundle` | `""` | `.pem` com o certificado raiz do antivírus/empresa |
 
 ## Segurança
 
-- O servidor escuta apenas em `127.0.0.1`, valida o `Host`, exige token por
-  sessão e `Origin` correto nos POSTs, não serve `config.json` e não tem
-  endpoint que apague ou escreva na sua pasta.
-- Dados de reuniões e o `config.json` estão no `.gitignore`. Nunca coloque
-  tokens no código.
+- O servidor escuta só em `127.0.0.1`, valida o `Host`, exige token por sessão e
+  `Origin` correto nos POSTs, não serve `config.json` e não tem endpoint que
+  apague ou escreva na sua pasta de origem.
+- Dados de reuniões e `config.json` estão no `.gitignore`. Nunca coloque tokens
+  no código.
 
-## Problemas comuns
+## Mais
 
-### `self-signed certificate in certificate chain` ao baixar o modelo
-
-A primeira transcrição baixa o modelo (~500 MB) de huggingface.co. Se um
-**antivírus** (Kaspersky, ESET, Avast…) ou o **proxy da empresa** inspeciona o
-HTTPS, ele reassina o certificado e o Python não confia nele. Abra a tela
-**Ambiente** do portal (ou rode `Diagnostico_Rede.bat`): ela mostra quem assina
-o certificado e oferece a correção. Soluções, da mais simples à mais manual:
-
-1. **`pip-system-certs`** (já no `requirements.txt`) faz o Python usar os
-   certificados do Windows. Se faltar, use o botão *Instalar suporte a
-   certificados* na tela Ambiente ou:
-   `.venv\Scripts\python.exe -m pip install pip-system-certs`
-2. **Certificado raiz da empresa/antivírus**: exporte-o em Base64 (`.pem`) e
-   informe em `config.json`: `"ca_bundle": "C:\\pasta\\empresa.pem"`.
-3. **Sem internet no destino**: leve o modelo de um computador que já o tenha.
-   Na origem: `python transferir_modelo.py exportar small` (gera
-   `modelo_small.zip`); no destino: `python transferir_modelo.py importar modelo_small.zip`.
-   A partir daí a transcrição roda 100% offline (o worker usa o modelo local
-   primeiro e só vai à rede se ele não existir).
-
-O portal avisa na tela *Nova execução* quando o modelo ainda não está no
-computador.
-
-### Outros
-
-- **Falha na GPU**: o arquivo é retentado na CPU; o motivo aparece no portal.
-- **Versões de pacotes**: o `requirements.txt` fixa as versões validadas
-  (a pilha de IA já quebrou por atualização, ex.: `av`). Não atualize sem testar.
+[`docs/arquitetura.md`](docs/arquitetura.md) descreve etapas, eventos, trava e
+tratamento de interrupções. Testes: `python -m unittest discover tests`.

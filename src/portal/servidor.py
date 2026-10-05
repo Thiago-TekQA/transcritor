@@ -15,9 +15,9 @@ import urllib.request
 import webbrowser
 
 PASTA_PORTAL = os.path.dirname(os.path.abspath(__file__))
-PASTA_RAIZ = os.path.dirname(PASTA_PORTAL)
+PASTA_SRC = os.path.dirname(PASTA_PORTAL)
 
-sys.path.insert(0, PASTA_RAIZ)
+sys.path.insert(0, PASTA_SRC)
 sys.path.insert(0, PASTA_PORTAL)
 
 from aiohttp import web  # noqa: E402

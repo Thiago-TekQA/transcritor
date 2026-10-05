@@ -435,6 +435,42 @@ class TesteProcessos(unittest.TestCase):
         self.assertTrue(por_pid[50]["proprio"] and por_pid[50]["protegido"])
         self.assertNotIn(60, por_pid)  # navegador não é do transcritor
 
+    def test_lancador_do_venv_nao_conta_em_dobro(self):
+        # python.exe do .venv + o python.exe filho que ele inicia: um só
+        venv = '"X:\\Nova\\.venv\\Scripts\\python.exe"'
+        lista = [
+            _p(1, 0, "explorer.exe"),
+            _p(20, 1, "python.exe", venv + ' -u "X:\\Nova\\src\\pipeline.py" --etapas mp3'),
+            _p(21, 20, "python.exe", venv + ' -u "X:\\Nova\\src\\pipeline.py" --etapas mp3'),
+            _p(49, 1, "python.exe", venv + ' "X:\\Nova\\src\\portal\\servidor.py"'),
+            _p(50, 49, "python.exe", venv + ' "X:\\Nova\\src\\portal\\servidor.py"'),
+        ]
+        m = proc.montar_mapa(lista, {}, 50, "X:\\Nova", {})
+        self.assertEqual(m["pipelines_ativos"], 1)
+        self.assertEqual(m["alertas"], [])
+
+    @unittest.skipUnless(os.name == "nt", "mapeamento real é só Windows")
+    def test_caminho_com_acento_chega_inteiro(self):
+        pasta = tempfile.mkdtemp(prefix="transcrição_")
+        script = os.path.join(pasta, "pipeline.py")
+        with open(script, "w") as f:
+            f.write("import time\ntime.sleep(120)\n")
+        falso = subprocess.Popen([sys.executable, script],
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+        try:
+            achado = None
+            for _ in range(10):
+                time.sleep(0.5)
+                achado = next((p for p in proc._ler_processos() if p["pid"] == falso.pid), None)
+                if achado:
+                    break
+            self.assertIsNotNone(achado)
+            self.assertIn("transcrição_", achado["cmd"])
+        finally:
+            falso.kill()
+            falso.wait(timeout=10)
+            shutil.rmtree(pasta, ignore_errors=True)
+
     def test_encerrar_so_pid_do_mapa_e_nunca_o_proprio(self):
         with self.assertRaises(ValueError):
             proc.encerrar("abc")
@@ -462,7 +498,9 @@ class TesteProcessos(unittest.TestCase):
             self.assertIsNotNone(achado, "o processo de mentira deveria aparecer no mapa")
             self.assertEqual(achado["tipo"], "pipeline")
             self.assertFalse(achado["desta_instalacao"])
-            antes = {r["pid"] for r in self._todos(mapa["raizes"])} - {falso.pid}
+            # (num .venv o python.exe inicia outro python.exe filho, que cai junto)
+            dele = {falso.pid} | {f["pid"] for f in self._todos(achado["filhos"])}
+            antes = {r["pid"] for r in self._todos(mapa["raizes"])} - dele
             msg = proc.encerrar(falso.pid)
             self.assertIn("encerrado", msg)
             self.assertIsNotNone(falso.wait(timeout=10))

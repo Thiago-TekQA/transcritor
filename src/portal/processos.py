@@ -242,12 +242,19 @@ def montar_mapa(processos, gpu_por_pid, meu_pid, raiz_local, execucao_por_pid):
 
     raizes = []
 
+    # O python.exe de um .venv só repassa o trabalho a um python.exe filho,
+    # com a mesma linha de comando: os dois aparecem na lista, mas são um
+    # pipeline (ou portal) só. `repetidos` guarda o filho de cada par.
+    repetidos = set()
+
     for pid, r in relevantes.items():
 
         pai = pai_relevante(pid)
 
         if pai is not None and pai != pid:
             relevantes[pai]["filhos"].append(r)
+            if relevantes[pai]["tipo"] == r["tipo"] and r["tipo"] in ("pipeline", "portal"):
+                repetidos.add(pid)
         else:
             raizes.append(r)
 
@@ -256,8 +263,16 @@ def montar_mapa(processos, gpu_por_pid, meu_pid, raiz_local, execucao_por_pid):
 
     raizes.sort(key=lambda r: r["inicio"])
 
-    pipelines = [r for r in relevantes.values() if r["tipo"] == "pipeline"]
-    portais = [r for r in relevantes.values() if r["tipo"] == "portal" and not r["proprio"]]
+    pipelines = [
+        r for r in relevantes.values()
+        if r["tipo"] == "pipeline" and r["pid"] not in repetidos
+    ]
+    # (o próprio portal e o lançador do .venv dele, que é protegido, não contam)
+    portais = [
+        r for r in relevantes.values()
+        if r["tipo"] == "portal" and not r["protegido"]
+        and r["pid"] not in repetidos
+    ]
 
     alertas = []
 
@@ -299,6 +314,9 @@ def montar_mapa(processos, gpu_por_pid, meu_pid, raiz_local, execucao_por_pid):
 
 _PS = (
     "$ErrorActionPreference='SilentlyContinue';"
+    # sem isto a saída vem na página de código do console e os acentos dos
+    # caminhos se perdem (a pasta com "ç" vira "outra instalação")
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
     "@(Get-CimInstance Win32_Process | ForEach-Object {"
     "[pscustomobject]@{"
     "pid=[int]$_.ProcessId;ppid=[int]$_.ParentProcessId;nome=$_.Name;"

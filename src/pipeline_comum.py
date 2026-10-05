@@ -69,6 +69,9 @@ from pipeline_config import (  # noqa: E402,F401
     definir_itens,
     item_selecionado,
     adquirir_trava,
+    limpar_interrompidos,
+    restaurar_consolidacao,
+    MANIFESTO_CONSOLIDACAO,
 )
 
 HF_TOKEN = CONFIG["hf_token"]

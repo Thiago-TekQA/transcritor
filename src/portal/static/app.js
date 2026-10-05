@@ -186,6 +186,9 @@
       etapas: new Set(PRESETS.tudo),
       plano: null,
       sel: new Set(),
+      selParados: new Set(),
+      vistos: new Set(),
+      vistosP: new Set(),
       analisando: false,
     };
 
@@ -237,19 +240,32 @@
 
     async function analisar() {
       est.origem = campoPasta.value.trim();
-      if (!est.origem) { areaPlano.replaceChildren(h("div", { class: "aviso-faixa erro" }, "Informe a pasta de origem.")); return; }
       if (!est.etapas.size) { areaPlano.replaceChildren(h("div", { class: "aviso-faixa erro" }, "Selecione ao menos uma etapa.")); return; }
       est.analisando = true;
-      areaPlano.replaceChildren(h("div", { class: "vazio" }, "Analisando a pasta…"));
+      if (est.origem) areaPlano.replaceChildren(h("div", { class: "vazio" }, "Analisando a pasta…"));
+      const pedir = (origem) => api("/api/plano", { method: "POST", corpo: {
+        origem, etapas: [...est.etapas], recursivo: est.recursivo } });
+      let plano = null;
+      let erroOrigem = null;
       try {
-        const plano = await api("/api/plano", { method: "POST", corpo: {
-          origem: est.origem, etapas: [...est.etapas], recursivo: est.recursivo } });
+        try {
+          plano = await pedir(est.origem);
+        } catch (e) {
+          if (!est.origem) throw e;
+          // a pasta informada não serve, mas os itens parados ainda aparecem
+          erroOrigem = e.message;
+          plano = await pedir("");
+        }
         if (minhaRota !== rotaId) return;
-        localStorage.setItem("ultima_origem", est.origem);
-        const anterior = est.plano ? est.sel : null;
+        if (est.origem && !erroOrigem) localStorage.setItem("ultima_origem", est.origem);
+        const anterior = est.sel, anteriorP = est.selParados;
         est.plano = plano;
-        est.sel = new Set(plano.itens.filter((i) => !i.excluido
-          && (!anterior || anterior.has(i.nome))).map((i) => i.nome));
+        est.erroOrigem = erroOrigem;
+        // item novo na lista nasce marcado; o que o usuário já desmarcou continua desmarcado
+        est.sel = new Set(plano.itens.filter((i) => !i.excluido && (!est.vistos.has(i.nome) || anterior.has(i.nome))).map((i) => i.nome));
+        est.selParados = new Set(plano.parados.filter((i) => !est.vistosP.has(i.nome) || anteriorP.has(i.nome)).map((i) => i.nome));
+        plano.itens.forEach((i) => est.vistos.add(i.nome));
+        plano.parados.forEach((i) => est.vistosP.add(i.nome));
         desenharPlano();
       } catch (e) {
         est.plano = null;
@@ -264,61 +280,122 @@
       return pilula("Bloqueado", "erro");
     }
 
+    function textoParou(i) {
+      const p = i.parou;
+      if (!p) return "Sem registro de execução (os arquivos já estavam na área de trabalho).";
+      const quando = fmtData(p.criado);
+      const e = p.etapa ? rotulo(p.etapa) : "";
+      const motivo = p.motivo ? ` — ${p.motivo}` : "";
+      switch (p.estado) {
+        case "cancelado": return `Interrompido na etapa ${e} (${quando})`;
+        case "falhou": return `Falhou na etapa ${e}${motivo} (${quando})`;
+        case "aguardando_cpu": case "rodando": return `Parou durante a etapa ${e} (${quando})`;
+        case "ok": return `A última execução (${quando}) fez só: ${(p.etapas || []).map(rotulo).join(", ")} — faltam as demais etapas`;
+        default: return `Não chegou a executar a etapa ${e} (${quando})`;
+      }
+    }
+
     function desenharPlano() {
       const p = est.plano;
-      if (!p.itens.length) {
-        areaPlano.replaceChildren(h("div", { class: "cartao vazio" },
-          "Nenhum arquivo de áudio ou vídeo encontrado nesta pasta."));
+      const parados = p.parados || [];
+
+      if (!p.itens.length && !parados.length) {
+        trocar(areaPlano, est.erroOrigem ? h("div", { class: "aviso-faixa erro" }, est.erroOrigem) : null,
+          est.origem && !est.erroOrigem ? h("div", { class: "cartao vazio" }, "Nenhum arquivo de áudio ou vídeo encontrado nesta pasta.")
+            : h("div", { class: "cartao vazio" }, "Informe a pasta com os vídeos/áudios e clique em Analisar."));
         return;
       }
 
       const escolhidos = p.itens.filter((i) => est.sel.has(i.nome));
-      const bloqueados = escolhidos.flatMap((i) => Object.entries(i.estagios)
+      const parSel = parados.filter((i) => est.selParados.has(i.nome));
+      const todosSel = [...escolhidos, ...parSel];
+      const bloqueados = todosSel.flatMap((i) => Object.entries(i.estagios)
         .filter(([, s]) => s.acao === "bloqueado").map(([e, s]) => ({ item: i.nome, etapa: e, ...s })));
       const copiar = escolhidos.filter((i) => i.copiar).reduce((a, i) => a + i.tamanho, 0);
-      const algoParaFazer = escolhidos.some((i) => Object.values(i.estagios).some((s) => s.acao === "executar"));
+      const algoParaFazer = todosSel.some((i) => Object.values(i.estagios).some((s) => s.acao === "executar"));
 
-      const todos = h("input", { type: "checkbox", "aria-label": "Selecionar todos" });
-      const validos = p.itens.filter((i) => !i.excluido);
-      todos.checked = validos.length > 0 && validos.every((i) => est.sel.has(i.nome));
-      todos.addEventListener("change", () => {
-        est.sel = new Set(todos.checked ? validos.map((i) => i.nome) : []);
-        desenharPlano();
+      const celulasEtapas = (i) => p.etapas.map((e) => {
+        const s = i.estagios[e];
+        return h("td", { class: "celula" }, textoAcao(s),
+          s.motivo ? h("span", { class: "sutil detalhe" }, s.motivo) : null);
       });
 
-      const cab = h("tr", {}, h("th", {}, todos), h("th", {}, "Arquivo"), h("th", {}, "Tamanho"),
-        ...p.etapas.map((e) => h("th", {}, rotulo(e))), h("th", {}, "Cópia"));
-
-      const linhas = p.itens.map((i) => {
-        if (i.excluido) {
-          return h("tr", { class: "excluido" }, h("td", {}), h("td", { class: "nome" }, i.nome),
-            h("td", { class: "tam" }, fmtTam(i.tamanho)),
-            h("td", { colspan: String(p.etapas.length + 1) }, pilula("Fora desta execução", ""), " ", i.excluido));
-        }
-        const chk = h("input", { type: "checkbox", "aria-label": `Selecionar ${i.nome}` });
-        chk.checked = est.sel.has(i.nome);
-        chk.addEventListener("change", () => {
-          if (chk.checked) est.sel.add(i.nome); else est.sel.delete(i.nome);
+      // ---- itens parados no meio do caminho
+      let cartaoParados = null;
+      if (parados.length) {
+        const todosP = h("input", { type: "checkbox", "aria-label": "Selecionar todos os parados" });
+        todosP.checked = parados.every((i) => est.selParados.has(i.nome));
+        todosP.addEventListener("change", () => {
+          est.selParados = new Set(todosP.checked ? parados.map((i) => i.nome) : []);
           desenharPlano();
         });
-        return h("tr", {}, h("td", {}, chk), h("td", { class: "nome" }, i.nome),
-          h("td", { class: "tam" }, fmtTam(i.tamanho)),
-          ...p.etapas.map((e) => {
-            const s = i.estagios[e];
-            return h("td", { class: "celula" }, textoAcao(s),
-              s.motivo ? h("span", { class: "sutil detalhe" }, s.motivo) : null);
-          }),
-          h("td", { class: "sutil" }, i.copiar ? `Copiar para ${i.copiar.area}` : "—"));
-      });
+        const linhasP = parados.map((i) => {
+          const chk = h("input", { type: "checkbox", "aria-label": `Continuar ${i.nome}` });
+          chk.checked = est.selParados.has(i.nome);
+          chk.addEventListener("change", () => {
+            if (chk.checked) est.selParados.add(i.nome); else est.selParados.delete(i.nome);
+            desenharPlano();
+          });
+          return h("tr", {}, h("td", {}, chk),
+            h("td", { class: "nome" }, i.nome,
+              h("div", { class: "sutil" }, `Já tem: ${i.feitas.join(", ") || "—"}`),
+              h("div", { class: "sutil" }, textoParou(i), i.parou ? " · " : "",
+                i.parou ? h("a", { href: `#/execucao/${i.parou.run}` }, "ver execução") : null)),
+            h("td", { class: "sutil" }, fmtData(i.modificado)),
+            ...celulasEtapas(i));
+        });
+        cartaoParados = h("div", { class: "cartao" },
+          h("div", { class: "linha", style: "margin-bottom:6px" },
+            h("h2", { style: "margin:0" }, `Parados no meio do caminho (${parados.length})`)),
+          h("p", { class: "sub", style: "margin:0 0 10px" },
+            "Estes itens já estão na área de trabalho e não foram concluídos. Marque os que devem continuar; o que já foi feito (vídeo, áudio, etapas prontas) é mantido e não é refeito."),
+          h("div", { class: "tabela-rolagem" }, h("table", {},
+            h("thead", {}, h("tr", {}, h("th", {}, todosP), h("th", {}, "Item"), h("th", {}, "Última atividade"),
+              ...p.etapas.map((e) => h("th", {}, rotulo(e))))),
+            h("tbody", {}, linhasP))));
+      }
+
+      // ---- arquivos da pasta de origem
+      let cartaoOrigem = null;
+      if (p.itens.length) {
+        const todos = h("input", { type: "checkbox", "aria-label": "Selecionar todos" });
+        const validos = p.itens.filter((i) => !i.excluido);
+        todos.checked = validos.length > 0 && validos.every((i) => est.sel.has(i.nome));
+        todos.addEventListener("change", () => {
+          est.sel = new Set(todos.checked ? validos.map((i) => i.nome) : []);
+          desenharPlano();
+        });
+        const cab = h("tr", {}, h("th", {}, todos), h("th", {}, "Arquivo"), h("th", {}, "Tamanho"),
+          ...p.etapas.map((e) => h("th", {}, rotulo(e))), h("th", {}, "Cópia"));
+        const linhas = p.itens.map((i) => {
+          if (i.excluido) {
+            return h("tr", { class: "excluido" }, h("td", {}), h("td", { class: "nome" }, i.nome),
+              h("td", { class: "tam" }, fmtTam(i.tamanho)),
+              h("td", { colspan: String(p.etapas.length + 1) }, pilula("Fora desta execução", ""), " ", i.excluido));
+          }
+          const chk = h("input", { type: "checkbox", "aria-label": `Selecionar ${i.nome}` });
+          chk.checked = est.sel.has(i.nome);
+          chk.addEventListener("change", () => {
+            if (chk.checked) est.sel.add(i.nome); else est.sel.delete(i.nome);
+            desenharPlano();
+          });
+          return h("tr", {}, h("td", {}, chk), h("td", { class: "nome" }, i.nome),
+            h("td", { class: "tam" }, fmtTam(i.tamanho)), ...celulasEtapas(i),
+            h("td", { class: "sutil" }, i.copiar ? `Copiar para ${i.copiar.area}` : "—"));
+        });
+        cartaoOrigem = h("div", { class: "cartao" },
+          h("h2", {}, `${p.itens.length} arquivo(s) na pasta`),
+          h("div", { class: "tabela-rolagem" }, h("table", {}, h("thead", {}, cab), h("tbody", {}, linhas))));
+      }
 
       const sugeridas = [...new Set(bloqueados.map((b) => b.sugerir).filter(Boolean))];
 
-      const iniciar = h("button", { class: "primario", disabled: !escolhidos.length || bloqueados.length > 0 || !algoParaFazer,
+      const iniciar = h("button", { class: "primario", disabled: !todosSel.length || bloqueados.length > 0 || !algoParaFazer,
         onclick: async () => {
           iniciar.disabled = true;
           try {
             const r = await api("/api/execucoes", { method: "POST", corpo: {
-              origem: p.origem, etapas: p.etapas, itens: [...est.sel], recursivo: est.recursivo } });
+              origem: p.origem, etapas: p.etapas, itens: [...est.sel, ...est.selParados], recursivo: est.recursivo } });
             location.hash = `#/execucao/${r.id}`;
           } catch (e) {
             alert(e.message);
@@ -327,24 +404,25 @@
         } }, "Iniciar execução");
 
       trocar(areaPlano,
+        est.erroOrigem ? h("div", { class: "aviso-faixa erro" }, `${est.erroOrigem} — mostrando só os itens já na área de trabalho.`) : null,
         bloqueados.length ? h("div", { class: "aviso-faixa erro" },
-          `${bloqueados.length} etapa(s) bloqueada(s) nos arquivos selecionados (falta algo de uma etapa anterior). `,
+          `${bloqueados.length} etapa(s) bloqueada(s) nos itens selecionados (falta algo de uma etapa anterior). `,
           sugeridas.length ? h("button", { onclick: () => {
             sugeridas.forEach((e) => est.etapas.add(e));
             desenharControles();
             analisar();
           } }, `Marcar: ${sugeridas.map(rotulo).join(", ")}`) : null) : null,
-        escolhidos.length && !algoParaFazer && !bloqueados.length
+        todosSel.length && !algoParaFazer && !bloqueados.length
           ? h("div", { class: "aviso-faixa info" }, "Tudo isto já existe na área de trabalho — não há nada a fazer.") : null,
-        h("div", { class: "cartao" },
-          h("div", { class: "linha" },
-            h("h2", {}, `${p.itens.length} arquivo(s) na pasta`),
-            h("span", { class: "sutil" }, `${escolhidos.length} selecionado(s)` +
-              (copiar ? ` · copiar ${fmtTam(copiar)} para a área de trabalho` : "")),
-            h("span", { class: "espaco" }), iniciar),
-          h("div", { class: "tabela-rolagem" }, h("table", {}, h("thead", {}, cab), h("tbody", {}, linhas))),
-        ),
-      );
+        h("div", { class: "cartao" }, h("div", { class: "linha" },
+          h("strong", {}, `${todosSel.length} item(ns) selecionado(s)`),
+          h("span", { class: "sutil" },
+            (parSel.length ? `${parSel.length} continuando` : "") +
+            (parSel.length && escolhidos.length ? " · " : "") +
+            (escolhidos.length ? `${escolhidos.length} da pasta` : "") +
+            (copiar ? ` · copiar ${fmtTam(copiar)} para a área de trabalho` : "")),
+          h("span", { class: "espaco" }), iniciar)),
+        cartaoParados, cartaoOrigem);
     }
 
     desenharControles();
@@ -366,7 +444,7 @@
       areaPlano,
     );
 
-    if (est.origem) analisar();
+    analisar();
   }
 
   // ---------------------------------------------------------------- Execução (acompanhamento)
@@ -463,7 +541,7 @@
       cab.replaceChildren(h("div", { class: "cartao" },
         h("div", { class: "linha" },
           h("div", {}, h("h1", {}, `Execução ${fmtData(s.criado)}`),
-            h("p", { class: "sub" }, s.origem, " · ", s.etapas.map(rotulo).join(" → "),
+            h("p", { class: "sub" }, s.origem || "Itens já na área de trabalho", " · ", s.etapas.map(rotulo).join(" → "),
               s.dispositivo ? ` · ${s.dispositivo.toUpperCase()}` : "",
               s.fase_atual ? ` · fase atual: ${rotulo(s.fase_atual)}` : "")),
           h("span", { class: "espaco" }), pilula(txt, tipo), ...botoes)));
@@ -484,6 +562,14 @@
         f.push(h("div", { class: "aviso-faixa erro" }, "O processo parou sem terminar (fechado por fora ou travado). Use Retomar: o que já foi feito é reaproveitado."));
       }
       if (s.erro) f.push(h("div", { class: "aviso-faixa erro" }, `Erro: ${s.erro}`));
+      if (s.limpezas && s.limpezas.length) {
+        const porEtapa = {};
+        s.limpezas.forEach((l) => { (porEtapa[l.etapa] = porEtapa[l.etapa] || []).push(l.nome); });
+        f.push(h("div", { class: "aviso-faixa info" },
+          "Limpeza após interrupção: " +
+          Object.entries(porEtapa).map(([e, ns]) => `${e === "copiar" ? "cópia" : rotulo(e)} (${ns.join(", ")})`).join("; ") +
+          " — só a saída parcial dessa etapa foi removida; vídeo e áudio foram mantidos."));
+      }
       faixas.replaceChildren(...f);
 
       const itens = Object.values(s.itens);
@@ -557,7 +643,7 @@
         const c = x.contagem || {};
         return h("tr", {},
           h("td", {}, h("a", { href: `#/execucao/${x.id}` }, fmtData(x.criado))),
-          h("td", { class: "nome" }, x.origem),
+          h("td", { class: "nome" }, x.origem || "Itens já na área de trabalho"),
           h("td", {}, x.etapas.map(rotulo).join(" → ")),
           h("td", { class: "num" }, String(x.arquivos)),
           h("td", {}, pilula(t, tipo)),

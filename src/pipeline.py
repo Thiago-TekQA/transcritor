@@ -172,6 +172,11 @@ def _capturar_erro_nao_tratado(tipo, valor, tb):
     log("ERRO NÃO TRATADO — PIPELINE INTERROMPIDO:")
     log("".join(traceback.format_exception(tipo, valor, tb)))
 
+    try:
+        pc.limpar_interrompidos(_registrar_limpeza)
+    except Exception:
+        pass
+
     pc.evento("erro_fatal", msg=str(valor))
     pc.evento("run_fim", resultado="erro", falhas=[])
 
@@ -201,26 +206,36 @@ def executar_subprocesso_com_log(cmd, prefixo=""):
 
     saida_completa = []
 
-    for linha in processo.stdout:
+    try:
 
-        linha = linha.rstrip()
+        for linha in processo.stdout:
 
-        # Progresso emitido pelo worker (vira evento pro portal, não log)
-        if linha.startswith("@@PROG "):
+            linha = linha.rstrip()
 
-            try:
-                pc.evento_progresso(int(linha.split()[1]))
-            except (ValueError, IndexError):
-                pass
+            # Progresso emitido pelo worker (vira evento pro portal, não log)
+            if linha.startswith("@@PROG "):
 
-            continue
+                try:
+                    pc.evento_progresso(int(linha.split()[1]))
+                except (ValueError, IndexError):
+                    pass
 
-        if linha:
+                continue
 
-            log(f"{prefixo}{linha}")
-            saida_completa.append(linha)
+            if linha:
 
-    processo.wait()
+                log(f"{prefixo}{linha}")
+                saida_completa.append(linha)
+
+        processo.wait()
+
+    except BaseException:
+
+        # Ctrl+C / erro no orquestrador: não deixa o worker órfão
+        # escrevendo em arquivo parcial.
+        processo.kill()
+
+        raise
 
     return processo.returncode, "\n".join(saida_completa)
 
@@ -316,18 +331,23 @@ log(f"FALANTES (min/max): {MIN_FALANTES} / {MAX_FALANTES}")
 log(f"ETAPAS: {', '.join(e for e in pc.ETAPAS_VALIDAS if e in ETAPAS) or '-'}")
 log("=" * 60)
 
-# Sobras de execuções canceladas no meio: nunca são saídas válidas.
-# (Seguro apagar: a trava garante que não há outra execução rodando.)
-for _pasta in [AUDIOS_DIR, TRANS_DIR, DIARIZ_DIR]:
+# Sobras de execuções interrompidas (arquivos .parcial, cópias .copiando e
+# consolidações pela metade): nunca são saídas válidas. Só a saída da etapa
+# que foi interrompida é descartada — vídeo, áudio e etapas já concluídas
+# ficam. (Seguro: a trava garante que não há outra execução rodando.)
 
-    for _arq in os.listdir(_pasta):
 
-        if _arq.endswith(".parcial"):
+def _registrar_limpeza(r):
 
-            try:
-                os.remove(os.path.join(_pasta, _arq))
-            except OSError:
-                pass
+    log(
+        f"LIMPEZA DE EXECUÇÃO INTERROMPIDA: {r['arquivo']} "
+        f"({r['etapa']}) removido"
+    )
+
+    pc.evento("limpeza", **r)
+
+
+pc.limpar_interrompidos(_registrar_limpeza)
 
 pc.evento(
     "run_inicio",
@@ -1117,8 +1137,12 @@ if "resumo" in ETAPAS and not interrompido():
 
             resumo = pc.gerar_resumo_ollama(transcricao, log)
 
-            with open(resumo_path, "w", encoding="utf-8") as f:
+            # .parcial + renomeação: nunca sobra um resumo pela metade que
+            # a próxima execução trataria como pronto.
+            with open(resumo_path + ".parcial", "w", encoding="utf-8") as f:
                 f.write(resumo)
+
+            os.replace(resumo_path + ".parcial", resumo_path)
 
             fim = time.time()
 
@@ -1133,6 +1157,8 @@ if "resumo" in ETAPAS and not interrompido():
             )
 
         except requests.exceptions.ConnectionError:
+
+            remover_parcial(resumo_path)
 
             log(
                 "ERRO NO RESUMO: não foi possível conectar ao Ollama "
@@ -1152,6 +1178,8 @@ if "resumo" in ETAPAS and not interrompido():
 
         except Exception as e:
 
+            remover_parcial(resumo_path)
+
             log(f"ERRO NO RESUMO: {nome} | {e}")
 
             registrar_falha(nome, "resumo", f"falhou: {e}")
@@ -1170,6 +1198,9 @@ if "resumo" in ETAPAS and not interrompido():
 # =========================================================
 
 nomes_para_consolidar = {}
+
+# Itens cuja consolidação falhou e foi desfeita (não podem ser limpos)
+consolidacao_falhou = set()
 
 if "consolidar" in ETAPAS and not interrompido():
 
@@ -1277,12 +1308,21 @@ if "consolidar" in ETAPAS and not interrompido():
             nome
         )
 
+        # Monta tudo em 6_Concluidos/<nome>.parcial e só renomeia a pasta no
+        # fim: assim um item "meio consolidado" nunca parece concluído. Se
+        # a pasta final já existe (execução antiga), usa-a direto.
+        pasta_montagem = pasta_final + ".parcial"
+
+        usar_montagem = not os.path.isdir(pasta_final)
+
+        destino_dir = pasta_montagem if usar_montagem else pasta_final
+
         os.makedirs(
-            pasta_final,
+            destino_dir,
             exist_ok=True
         )
 
-        arquivos_para_mover = [
+        arquivos_para_mover = list(dict.fromkeys([
 
             arquivo_origem,
 
@@ -1300,15 +1340,35 @@ if "consolidar" in ETAPAS and not interrompido():
                 DIARIZ_DIR,
                 f"{nome}_diarizado.txt"
             )
+        ]))
+
+        arquivos_para_mover = [
+            i for i in arquivos_para_mover if os.path.exists(i)
         ]
+
+        if usar_montagem:
+
+            # De onde cada arquivo veio, para poder desfazer se for
+            # interrompido no meio.
+            with open(
+                os.path.join(pasta_montagem, pc.MANIFESTO_CONSOLIDACAO),
+                "w",
+                encoding="utf-8"
+            ) as f:
+
+                json.dump(
+                    {
+                        os.path.basename(i): os.path.dirname(i)
+                        for i in arquivos_para_mover
+                    },
+                    f,
+                    ensure_ascii=False
+                )
 
         for item in arquivos_para_mover:
 
-            if not os.path.exists(item):
-                continue
-
             destino = os.path.join(
-                pasta_final,
+                destino_dir,
                 os.path.basename(item)
             )
 
@@ -1338,7 +1398,7 @@ if "consolidar" in ETAPAS and not interrompido():
 
         if pc.copiar_se_existir(
             resumo_path,
-            os.path.join(pasta_final, os.path.basename(resumo_path))
+            os.path.join(destino_dir, os.path.basename(resumo_path))
         ):
 
             log(f"RESUMO COPIADO PARA: {pasta_final}")
@@ -1346,10 +1406,38 @@ if "consolidar" in ETAPAS and not interrompido():
         pc.copiar_se_existir(
             LOG_FILE,
             os.path.join(
-                pasta_final,
+                destino_dir,
                 "pipeline.log"
             )
         )
+
+        if usar_montagem:
+
+            if erro_mover:
+
+                # Desfaz: tudo volta ao lugar de origem
+                pc.restaurar_consolidacao(pasta_montagem)
+
+                log(
+                    f"CONSOLIDAÇÃO DESFEITA (arquivos voltaram ao lugar): "
+                    f"{nome}"
+                )
+
+                consolidacao_falhou.add(nome)
+
+            else:
+
+                try:
+                    os.remove(
+                        os.path.join(
+                            pasta_montagem,
+                            pc.MANIFESTO_CONSOLIDACAO
+                        )
+                    )
+                except OSError:
+                    pass
+
+                os.replace(pasta_montagem, pasta_final)
 
         if erro_mover:
 
@@ -1361,6 +1449,9 @@ if "consolidar" in ETAPAS and not interrompido():
         else:
 
             pc.evento("item", etapa="consolidar", nome=nome, estado="ok")
+
+    for _n in consolidacao_falhou:
+        nomes_para_consolidar.pop(_n, None)
 
 # =========================================================
 # FASE 5 - LIMPEZA

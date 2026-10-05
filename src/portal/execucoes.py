@@ -241,7 +241,9 @@ def planejar(origem, etapas, recursivo=False):
     acontecer: executar, pular (já existe) ou bloqueado (falta algo).
     Não altera nada em disco."""
 
-    if not origem or not os.path.isdir(origem):
+    # A pasta de origem é opcional: dá para só continuar itens que ficaram
+    # parados no meio do caminho na área de trabalho.
+    if origem and not os.path.isdir(origem):
         raise ValueError("pasta de origem não encontrada")
 
     etapas = [e for e in cfg.ETAPAS_VALIDAS if e in set(etapas)]
@@ -249,7 +251,7 @@ def planejar(origem, etapas, recursivo=False):
     if not etapas:
         raise ValueError("selecione ao menos uma etapa")
 
-    arquivos = _listar_midias(origem, recursivo)
+    arquivos = _listar_midias(origem, recursivo) if origem else []
 
     por_nome = {}
 
@@ -292,7 +294,181 @@ def planejar(origem, etapas, recursivo=False):
 
         itens.append(item)
 
-    return {"origem": origem, "etapas": etapas, "itens": itens}
+    # Itens parados no meio do caminho (já na área de trabalho, não
+    # concluídos). Se o nome coincide com um arquivo da origem, a linha da
+    # origem já mostra o que existe — não repete.
+    nomes_origem = {i["nome"] for i in itens}
+
+    parados = []
+
+    for p in listar_parados():
+
+        if p["nome"] in nomes_origem:
+            continue
+
+        _planejar_item(p, etapas)
+
+        parados.append(p)
+
+    return {
+        "origem": origem or "",
+        "etapas": etapas,
+        "itens": itens,
+        "parados": parados,
+    }
+
+
+def _ultima_parada(nome):
+    """Onde e por quê o item parou, segundo a execução mais recente que o
+    incluiu. None se nenhuma execução do portal o tocou."""
+
+    if not os.path.isdir(EXECUCOES_DIR):
+        return None
+
+    for rid in sorted(os.listdir(EXECUCOES_DIR), reverse=True)[:40]:
+
+        params = obter_params(rid)
+
+        if not params or nome not in [i["nome"] for i in params["itens"]]:
+            continue
+
+        estado = montar_estado(rid)
+
+        if not estado:
+            continue
+
+        item = estado["itens"].get(nome)
+
+        if not item:
+            continue
+
+        for etapa in estado["etapas"]:
+
+            st = item["etapas"].get(etapa, {})
+
+            if st.get("estado") not in ("ok", "pulado"):
+
+                return {
+                    "run": rid,
+                    "criado": params.get("criado"),
+                    "etapa": etapa,
+                    "estado": st.get("estado"),
+                    "motivo": st.get("motivo"),
+                }
+
+        return {
+            "run": rid,
+            "criado": params.get("criado"),
+            "etapa": None,
+            "estado": "ok",
+            "motivo": None,
+            "etapas": estado["etapas"],
+        }
+
+    return None
+
+
+def listar_parados():
+    """Itens que já estão na área de trabalho e NÃO foram concluídos (sem
+    pasta em 6_Concluidos), com o que já existe de cada um e onde pararam."""
+
+    itens = {}
+
+    def registrar(nome, chave, caminho):
+
+        d = itens.setdefault(nome, {
+            "nome": nome, "origem": None, "ext": ".mp3", "tamanho": 0,
+            "copiar": None, "excluido": None, "estagios": {},
+            "parado": True, "feitas": [], "modificado": "",
+            "_m": 0.0, "_chaves": set(),
+        })
+
+        d["_chaves"].add(chave)
+
+        try:
+            d["_m"] = max(d["_m"], os.path.getmtime(caminho))
+        except OSError:
+            pass
+
+        return d
+
+    def varrer(pasta):
+
+        if not os.path.isdir(pasta):
+            return
+
+        for a in os.listdir(pasta):
+
+            if a.endswith((".parcial", ".copiando")):
+                continue
+
+            yield a, os.path.join(pasta, a)
+
+    for a, caminho in varrer(cfg.VIDEOS_DIR):
+
+        stem, ext = os.path.splitext(a)
+
+        if ext.lower() in cfg.VIDEOS_SUPORTADOS:
+
+            d = registrar(cfg.sanitizar_nome(stem), "original", caminho)
+            d["ext"] = ext.lower()
+
+            try:
+                d["tamanho"] = os.path.getsize(caminho)
+            except OSError:
+                pass
+
+    for a, caminho in varrer(cfg.AUDIOS_DIR):
+
+        stem, ext = os.path.splitext(a)
+
+        if ext.lower() == ".mp3":
+            registrar(cfg.sanitizar_nome(stem), "audio", caminho)
+
+        elif ext.lower() in cfg.VIDEOS_SUPORTADOS:
+            registrar(cfg.sanitizar_nome(stem), "original", caminho)
+
+    for a, caminho in varrer(cfg.TRANS_DIR):
+
+        if a.endswith(".txt") and not a.endswith(("_diarizado.txt", "_resumo.txt")):
+            registrar(cfg.sanitizar_nome(a[: -len(".txt")]), "transcricao", caminho)
+
+    for a, caminho in varrer(cfg.DIARIZ_DIR):
+
+        if a.endswith("_diarizado.txt"):
+            registrar(cfg.sanitizar_nome(a[: -len("_diarizado.txt")]), "diarizacao", caminho)
+
+    for a, caminho in varrer(cfg.RESUMOS_DIR):
+
+        if a.endswith("_resumo.txt"):
+            registrar(cfg.sanitizar_nome(a[: -len("_resumo.txt")]), "resumo", caminho)
+
+    rotulos = {
+        "original": "vídeo/áudio original", "audio": "áudio (mp3)",
+        "transcricao": "transcrição", "diarizacao": "diarização",
+        "resumo": "resumo",
+    }
+
+    saida = []
+
+    for nome, d in itens.items():
+
+        # já concluído: o resumo em 8_Resumos é a cópia permanente
+        if os.path.isdir(os.path.join(cfg.DONE_DIR, nome)):
+            continue
+
+        d["feitas"] = [rotulos[c] for c in rotulos if c in d["_chaves"]]
+        d["modificado"] = time.strftime(
+            "%Y-%m-%dT%H:%M:%S", time.localtime(d["_m"]))
+        d["parou"] = _ultima_parada(nome)
+
+        del d["_m"], d["_chaves"]
+
+        saida.append(d)
+
+    saida.sort(key=lambda i: i["modificado"], reverse=True)
+
+    return saida
 
 
 def _planejar_item(item, etapas):
@@ -324,7 +500,11 @@ def _planejar_item(item, etapas):
         else os.path.join(cfg.VIDEOS_DIR, nome + ext)
     )
 
-    if os.path.exists(destino) and os.path.getsize(destino) != item["tamanho"]:
+    if (
+        item["origem"] is not None
+        and os.path.exists(destino)
+        and os.path.getsize(destino) != item["tamanho"]
+    ):
 
         item["excluido"] = (
             "já existe um arquivo diferente com este nome na área de "
@@ -405,6 +585,13 @@ def _planejar_item(item, etapas):
                     "motivo": f"falta {faltando} — marque a etapa antes",
                     "sugerir": "resumo" if tem_trans else "transcricao",
                 }
+
+    # Item que já está na área de trabalho (parado): nada a copiar.
+    if item["origem"] is None:
+
+        item["copiar"] = None
+
+        return
 
     # Precisa copiar o original da pasta de origem?
     if e_audio:
@@ -620,7 +807,7 @@ def criar_execucao(origem, etapas, itens_escolhidos, recursivo=False,
         escolhidos = set(itens_escolhidos or [])
 
         itens = [
-            i for i in plano["itens"]
+            i for i in plano["itens"] + plano["parados"]
             if i["nome"] in escolhidos and not i["excluido"]
         ]
 
@@ -650,11 +837,12 @@ def criar_execucao(origem, etapas, itens_escolhidos, recursivo=False,
         params = {
             "id": run_id,
             "criado": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "origem": origem,
+            "origem": origem or "",
             "recursivo": bool(recursivo),
             "etapas": plano["etapas"],
             "itens": [
                 {"nome": i["nome"], "tamanho": i["tamanho"],
+                 "parado": bool(i.get("parado")),
                  "estagios": {e: s["acao"] for e, s in i["estagios"].items()}}
                 for i in itens
             ],
@@ -729,32 +917,51 @@ def parar_execucao(run_id):
         f.write("parar")
 
 
-def _varrer_parciais(tentativas=15):
-    """Apaga saídas .parcial. Repete por alguns segundos porque, logo após
-    matar o processo, o Windows ainda pode estar segurando o arquivo."""
+def _limpar_interrompidos(run_dir=None, tentativas=15):
+    """Remove o que uma execução interrompida deixou pela metade (só a saída
+    da etapa que estava em andamento). Repete por alguns segundos porque,
+    logo após matar o processo, o Windows ainda pode estar segurando o
+    arquivo. Cada item limpo vira um evento `limpeza` na execução."""
+
+    def registrar(r):
+
+        if run_dir:
+            escrever_evento(run_dir, "limpeza", **r)
+
+    total = []
 
     for _ in range(tentativas):
 
-        sobrou = False
+        removidos, falhas = cfg.limpar_interrompidos(registrar)
 
-        for pasta in (cfg.AUDIOS_DIR, cfg.TRANS_DIR, cfg.DIARIZ_DIR):
+        total += removidos
 
-            if not os.path.isdir(pasta):
-                continue
-
-            for a in os.listdir(pasta):
-
-                if a.endswith(".parcial"):
-
-                    try:
-                        os.remove(os.path.join(pasta, a))
-                    except OSError:
-                        sobrou = True
-
-        if not sobrou:
-            return
+        if not falhas:
+            break
 
         time.sleep(0.4)
+
+    return total
+
+
+def _limpar_se_preciso(run_dir):
+    """Execução que morreu por fora (sem run_fim): limpa uma única vez,
+    desde que nenhuma outra execução esteja ativa."""
+
+    marca = os.path.join(run_dir, "limpo.flag")
+
+    if os.path.exists(marca) or execucao_ativa():
+        return
+
+    try:
+
+        open(marca, "w").close()
+
+        _limpar_interrompidos(run_dir, tentativas=3)
+
+    except OSError:
+
+        pass
 
 
 def cancelar_execucao(run_id):
@@ -797,7 +1004,7 @@ def cancelar_execucao(run_id):
 
             time.sleep(0.25)
 
-    _varrer_parciais()
+    _limpar_interrompidos(run_dir)
 
     escrever_evento(run_dir, "cancelado", modo="duro")
     escrever_evento(run_dir, "run_fim", resultado="cancelada", falhas=[])
@@ -893,6 +1100,7 @@ def dobrar_eventos(params, eventos):
         "pausa_termica": None,
         "ollama": None,
         "pedido_parada": False,
+        "limpezas": [],
         "falhas": [],
         "erro": None,
         "dispositivo": None,
@@ -977,6 +1185,14 @@ def dobrar_eventos(params, eventos):
 
             estado["ollama"] = ev.get("estado")
 
+        elif tipo == "limpeza":
+
+            estado["limpezas"].append({
+                "etapa": ev.get("etapa"),
+                "nome": ev.get("nome"),
+                "arquivo": ev.get("arquivo"),
+            })
+
         elif tipo == "cancelado":
 
             estado["pedido_parada"] = True
@@ -1057,6 +1273,8 @@ def montar_estado(run_id):
             estado["fase_atual"] = None
 
             _encerrar_itens(estado, "interrompida")
+
+            _limpar_se_preciso(run_dir)
 
     estado["flag_parar"] = flag
     estado["pid"] = proc.get("pid") or estado.get("pid")

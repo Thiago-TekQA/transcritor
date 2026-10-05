@@ -8,6 +8,7 @@ funcionando como antes.
 
 import json
 import os
+import shutil
 import time
 
 # Pasta onde estão os scripts (src/) — NÃO muda com o base_dir do config.json.
@@ -289,3 +290,171 @@ def adquirir_trava():
     _ARQUIVO_TRAVA = f
 
     return True
+
+
+# =========================================================
+# LIMPEZA DE EXECUÇÕES INTERROMPIDAS
+# =========================================================
+# Regra: ao interromper, apaga-se SÓ a saída da etapa que estava em
+# andamento (os .parcial); vídeo, áudio e as saídas de etapas concluídas
+# ficam. Toda saída é escrita num .parcial e renomeada só no fim.
+
+MANIFESTO_CONSOLIDACAO = "_origem.json"
+
+
+def _remover(caminho):
+
+    try:
+        os.remove(caminho)
+        return True
+    except OSError:
+        return False
+
+
+def _classificar_parcial(arquivo):
+    """(etapa, nome do item) a partir do nome de um arquivo .parcial."""
+
+    base = arquivo[: -len(".parcial")]
+
+    if base.endswith(".mp3"):
+        return "mp3", base[: -len(".mp3")]
+
+    if base.endswith("_resumo.txt"):
+        return "resumo", base[: -len("_resumo.txt")]
+
+    if base.endswith("_diarizado.txt"):
+        return "diarizacao", base[: -len("_diarizado.txt")]
+
+    if base.endswith(".txt"):
+        return "transcricao", base[: -len(".txt")]
+
+    return "outro", base
+
+
+def restaurar_consolidacao(pasta_montagem):
+    """Desfaz uma consolidação interrompida: os arquivos já movidos para
+    `6_Concluidos/<nome>.parcial/` voltam ao lugar de origem (vídeo, áudio,
+    transcrição, diarização); as cópias do resumo e do log são descartadas.
+    Devolve True se tudo foi desfeito."""
+
+    nome = os.path.basename(pasta_montagem)[: -len(".parcial")]
+
+    caminho_manifesto = os.path.join(pasta_montagem, MANIFESTO_CONSOLIDACAO)
+
+    try:
+        with open(caminho_manifesto, "r", encoding="utf-8") as f:
+            manifesto = json.load(f)
+    except (OSError, ValueError):
+        manifesto = {}
+
+    padrao = {
+        f"{nome}_diarizado.txt": DIARIZ_DIR,
+        f"{nome}.txt": TRANS_DIR,
+        f"{nome}.mp3": AUDIOS_DIR,
+    }
+
+    ok = True
+
+    try:
+        arquivos = os.listdir(pasta_montagem)
+    except OSError:
+        return False
+
+    for arq in arquivos:
+
+        if arq == MANIFESTO_CONSOLIDACAO:
+            continue
+
+        origem = os.path.join(pasta_montagem, arq)
+
+        pasta = manifesto.get(arq) or padrao.get(arq)
+
+        if not pasta and os.path.splitext(arq)[1].lower() in VIDEOS_SUPORTADOS:
+            pasta = VIDEOS_DIR
+
+        if not pasta:
+            # cópia do resumo / pipeline.log: sem origem a restaurar
+            ok = _remover(origem) and ok
+            continue
+
+        destino = os.path.join(pasta, arq)
+
+        if os.path.exists(destino):
+            ok = _remover(origem) and ok
+            continue
+
+        try:
+            os.makedirs(pasta, exist_ok=True)
+            shutil.move(origem, destino)
+        except OSError:
+            ok = False
+
+    _remover(caminho_manifesto)
+
+    try:
+        os.rmdir(pasta_montagem)
+    except OSError:
+        ok = False
+
+    return ok
+
+
+def limpar_interrompidos(registrar=None):
+    """Remove o que execuções interrompidas deixaram pela metade.
+    `registrar(dict)` é chamado para cada item limpo (etapa, nome, arquivo).
+    Devolve (lista_de_removidos, quantidade_que_nao_deu_para_remover)."""
+
+    removidos = []
+    falhas = 0
+
+    def reg(etapa, nome, arquivo):
+
+        r = {"etapa": etapa, "nome": nome, "arquivo": arquivo}
+        removidos.append(r)
+
+        if registrar:
+            registrar(r)
+
+    for pasta in (AUDIOS_DIR, TRANS_DIR, DIARIZ_DIR, RESUMOS_DIR):
+
+        if not os.path.isdir(pasta):
+            continue
+
+        for a in os.listdir(pasta):
+
+            if a.endswith(".parcial"):
+
+                if _remover(os.path.join(pasta, a)):
+                    etapa, nome = _classificar_parcial(a)
+                    reg(etapa, nome, a)
+                else:
+                    falhas += 1
+
+    for pasta in (VIDEOS_DIR, AUDIOS_DIR):
+
+        if not os.path.isdir(pasta):
+            continue
+
+        for a in os.listdir(pasta):
+
+            if a.endswith(".copiando"):
+
+                if _remover(os.path.join(pasta, a)):
+                    reg("copiar", os.path.splitext(a[: -len(".copiando")])[0], a)
+                else:
+                    falhas += 1
+
+    if os.path.isdir(DONE_DIR):
+
+        for a in os.listdir(DONE_DIR):
+
+            caminho = os.path.join(DONE_DIR, a)
+
+            if a.endswith(".parcial") and os.path.isdir(caminho):
+
+                if restaurar_consolidacao(caminho):
+                    reg("consolidar", a[: -len(".parcial")], a)
+                else:
+                    falhas += 1
+
+    return removidos, falhas

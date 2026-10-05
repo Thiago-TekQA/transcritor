@@ -696,6 +696,7 @@
     const leitor = h("div", {});
     const abas = h("div", { class: "abas", role: "tablist" });
     const campo = h("input", { type: "search", placeholder: "Buscar pelo nome…", "aria-label": "Buscar" });
+    const controles = h("div", { class: "linha", style: "margin-bottom:12px" }, abas, h("span", { class: "espaco" }), campo);
     let debounce = null;
     campo.addEventListener("input", () => {
       clearTimeout(debounce);
@@ -748,21 +749,31 @@
         } catch (e) { texto.textContent = e.message; }
       }
 
+      // Lista -> detalhe: ao abrir uma reunião, a lista e os filtros somem
+      // (senão o item apareceria duas vezes: aberto em cima e listado embaixo).
+      controles.hidden = true;
+      lista.hidden = true;
       leitor.replaceChildren(h("div", { class: "cartao" },
-        h("div", { class: "linha" }, h("h2", { style: "margin:0" }, i.nome), h("span", { class: "espaco" }),
+        h("div", { class: "linha" },
+          h("button", { onclick: voltar }, "← Voltar para a lista"),
+          h("h2", { style: "margin:0" }, i.nome), h("span", { class: "espaco" }),
           h("button", { onclick: () => api(`/api/resultados/${encodeURIComponent(i.nome)}/abrir-pasta`,
-            { method: "POST", corpo: { aba } }).catch((e) => alert(e.message)) }, "Abrir pasta"),
-          h("button", { onclick: () => leitor.replaceChildren() }, "Fechar")),
+            { method: "POST", corpo: { aba } }).catch((e) => alert(e.message)) }, "Abrir pasta")),
         abasLeitor, texto));
-      leitor.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.scrollTo(0, 0);
       if (atual) mostrar(atual); else texto.textContent = "Sem arquivos de texto para mostrar.";
+    }
+
+    function voltar() {
+      leitor.replaceChildren();
+      controles.hidden = false;
+      lista.hidden = false;
     }
 
     desenharAbas();
     app.replaceChildren(h("h1", {}, "Resultados"),
       h("p", { class: "sub" }, "Reuniões já processadas. Clique para ler o resumo e a transcrição."),
-      h("div", { class: "linha", style: "margin-bottom:12px" }, abas, h("span", { class: "espaco" }), campo),
-      leitor, lista);
+      controles, leitor, lista);
     carregar();
   }
 

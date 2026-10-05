@@ -1066,7 +1066,37 @@
     document.querySelectorAll("#menu a").forEach((a) => a.classList.toggle("atual", a.dataset.rota === rota));
   }
 
+  let encerrado = false;     // portal desligado pelo botão: a página para de consultar
+
+  async function encerrarPortal() {
+    let ativa = false;
+    try { ativa = !!(await api("/api/execucoes")).ativa; } catch (_) { /* decide sem saber */ }
+    const pergunta = ativa
+      ? "Encerrar o portal?\n\nA execução em andamento continua em segundo plano. Para acompanhar, abra o Transcritor de novo."
+      : "Encerrar o portal?\n\nPara usar de novo, abra o Transcritor.";
+    if (!confirm(pergunta)) return;
+    try {
+      await api("/api/encerrar", { method: "POST" });
+    } catch (e) {
+      alert(`Não foi possível encerrar o portal: ${e.message}`);
+      return;
+    }
+    encerrado = true;
+    rotaId++;
+    limparTimers();
+    modalFundo.hidden = true;
+    document.getElementById("menu").hidden = true;
+    document.getElementById("ativa").hidden = true;
+    document.getElementById("encerrar").hidden = true;
+    trocar(app, h("div", { class: "cartao vazio" },
+      h("h2", { texto: "Portal encerrado" }),
+      h("p", { texto: ativa
+        ? "A execução em andamento continua em segundo plano. Pode fechar esta aba; para acompanhar, abra o Transcritor de novo."
+        : "Pode fechar esta aba. Para usar de novo, abra o Transcritor." })));
+  }
+
   async function atualizarAtiva() {
+    if (encerrado) return;
     try {
       const r = await api("/api/execucoes");
       const el = document.getElementById("ativa");
@@ -1081,6 +1111,7 @@
   }
 
   function rotear() {
+    if (encerrado) return;
     rotaId++;
     limparTimers();
     modalFundo.hidden = true;
@@ -1104,6 +1135,7 @@
       return;
     }
     window.addEventListener("hashchange", rotear);
+    document.getElementById("encerrar").addEventListener("click", encerrarPortal);
     setInterval(atualizarAtiva, 5000);
     rotear();
   }

@@ -29,8 +29,12 @@ Tudo roda na própria máquina — nenhum áudio ou texto é enviado para a inte
    com a mesma conta do token.
 
 ## Usar
-Abra o atalho **Transcritor** (ou o `Transcritor` da pasta, ou `Portal.bat`).
-Resultados em
+Abra o atalho **Transcritor** (ou o `Transcritor` da pasta). O portal abre no
+navegador e fica rodando em segundo plano, sem janela; para desligá-lo, use o
+botão **Encerrar portal** no topo da página (uma execução em andamento
+continua). O que ele imprimiria na tela vai para `dados\5_Logs\portal.log`.
+O `Portal.bat` faz o mesmo com uma janela de console — fechá-la encerra o
+portal —, útil para ver erros. Resultados em
 `dados\6_Concluidos\<reunião>\` (transcrição + resumo); cópia dos resumos em
 `dados\8_Resumos`. Sem portal: `ferramentas\Executar Pipeline (sem portal).bat`.
 

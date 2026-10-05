@@ -30,9 +30,9 @@ combinação). O que já foi feito é pulado automaticamente.
    FFmpeg e Ollama (via winget), cria o ambiente `.venv` com as versões
    fixadas, baixa os modelos, cria a pasta `dados/` e um atalho
    **Transcritor** na Área de Trabalho.
-3. Abra o atalho (ou o **`Transcritor`** da pasta, ou `Portal.bat`): o
-   navegador abre em
-   <http://127.0.0.1:8765>.
+3. Abra o atalho (ou o **`Transcritor`** da pasta): o navegador abre em
+   <http://127.0.0.1:8765>. O portal roda em segundo plano, sem janela;
+   para desligá-lo, use **Encerrar portal** no topo da página.
 
 Requisitos, rede corporativa/antivírus e atualização de instalações antigas:
 [`docs/instalacao.md`](docs/instalacao.md).

@@ -11,6 +11,7 @@ import os
 import secrets
 import sys
 import threading
+import time
 import urllib.request
 import webbrowser
 
@@ -135,6 +136,21 @@ async def estatico(request):
 async def ping(request):
 
     return _json({"ok": True, "portal": "transcritor"})
+
+
+def _sair():
+
+    # mesmo caminho do Ctrl+C: o run_app fecha as conexões e devolve o controle
+    raise web.GracefulExit()
+
+
+async def portal_encerrar(request):
+    """Desliga só o portal (botão "Encerrar portal"). Uma execução em
+    andamento é outro processo e continua. Responde antes de sair."""
+
+    asyncio.get_running_loop().call_later(0.5, _sair)
+
+    return _json({"ok": True})
 
 
 async def config(request):
@@ -416,6 +432,7 @@ def criar_app():
     app.router.add_get("/static/{nome}", estatico)
 
     app.router.add_get("/api/ping", ping)
+    app.router.add_post("/api/encerrar", portal_encerrar)
     app.router.add_get("/api/config", config)
     app.router.add_get("/api/parados/ocultos", parados_ocultos)
     app.router.add_get("/api/parados/{nome}/arquivos", parados_arquivos)
@@ -461,9 +478,27 @@ def ja_esta_rodando():
         return False
 
 
+def _saida_para_o_log():
+    """Sem janela (aberto pelo Transcritor.exe): o que iria para a tela vai
+    para 5_Logs/portal.log."""
+
+    os.makedirs(cfg.LOGS_DIR, exist_ok=True)
+
+    sys.stdout = sys.stderr = open(
+        os.path.join(cfg.LOGS_DIR, "portal.log"), "a", encoding="utf-8",
+        buffering=1,
+    )
+
+
+def _agora():
+
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def main():
 
     url = f"http://127.0.0.1:{PORTA}/"
+    segundo_plano = "--segundo-plano" in sys.argv
 
     if ja_esta_rodando():
 
@@ -472,12 +507,19 @@ def main():
 
         return
 
-    print("=" * 60)
-    print("  PORTAL DO TRANSCRITOR")
-    print(f"  Endereço: {url}")
-    print("  Fechar esta janela NÃO interrompe uma execução em andamento.")
-    print("  Para encerrar só o portal: Ctrl+C.")
-    print("=" * 60)
+    if segundo_plano:
+
+        _saida_para_o_log()
+        print(f"[{_agora()}] PORTAL INICIADO (PID {os.getpid()}) em {url}")
+
+    else:
+
+        print("=" * 60)
+        print("  PORTAL DO TRANSCRITOR")
+        print(f"  Endereço: {url}")
+        print("  Fechar esta janela encerra o portal, mas NÃO interrompe uma")
+        print("  execução em andamento.")
+        print("=" * 60)
 
     if "--sem-navegador" not in sys.argv:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
@@ -486,6 +528,9 @@ def main():
         criar_app(), host="127.0.0.1", port=PORTA, print=None,
         access_log=None,
     )
+
+    if segundo_plano:
+        print(f"[{_agora()}] PORTAL ENCERRADO")
 
 
 if __name__ == "__main__":

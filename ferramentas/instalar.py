@@ -33,6 +33,7 @@ PASTAS = [
 
 ICONE = os.path.join(PASTA, "assets", "icone.ico")
 PORTAL_BAT = os.path.join(PASTA, "Portal.bat")
+PORTAL_EXE = os.path.join(PASTA, "Transcritor.exe")  # abre o portal sem janela
 
 
 def titulo(texto):
@@ -229,12 +230,15 @@ def _ps(texto):
 
 
 def criar_atalho(pasta_destino=None):
-    """Cria o atalho "Transcritor" (abre o Portal.bat) com o ícone do
-    projeto. Sem `pasta_destino`, usa a Área de Trabalho do usuário (o
+    """Cria o atalho "Transcritor" (abre o portal) com o ícone do projeto.
+    Aponta para o Transcritor.exe, que abre sem janela; na falta dele, para
+    o Portal.bat. Sem `pasta_destino`, usa a Área de Trabalho do usuário (o
     Windows informa o caminho certo, mesmo com OneDrive). Devolve o caminho
     do atalho ou None se não conseguiu."""
 
-    if not os.path.exists(PORTAL_BAT):
+    alvo = PORTAL_EXE if os.path.exists(PORTAL_EXE) else PORTAL_BAT
+
+    if not os.path.exists(alvo):
         return None
 
     destino = (
@@ -247,7 +251,7 @@ def criar_atalho(pasta_destino=None):
         "if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null }; "
         "$lnk = Join-Path $d 'Transcritor.lnk'; "
         "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk); "
-        f"$s.TargetPath = {_ps(PORTAL_BAT)}; "
+        f"$s.TargetPath = {_ps(alvo)}; "
         f"$s.WorkingDirectory = {_ps(PASTA)}; "
         f"$s.IconLocation = {_ps(ICONE)}; "
         "$s.Description = 'Portal do Transcritor'; "

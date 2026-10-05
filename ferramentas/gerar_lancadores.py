@@ -14,10 +14,12 @@ import sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTE = os.path.join(RAIZ, "ferramentas", "lancador.cs")
 
-# (arquivo gerado, ícone, símbolo de compilação)
+# (arquivo gerado, ícone, símbolo de compilação, tipo)
+# exe = com janela de console (o instalador mostra o progresso nela);
+# winexe = sem janela (o portal roda em segundo plano).
 LANCADORES = [
-    ("Instalar Transcritor.exe", "icone_instalar.ico", "INSTALAR"),
-    ("Transcritor.exe", "icone.ico", "PORTAL"),
+    ("Instalar Transcritor.exe", "icone_instalar.ico", "INSTALAR", "exe"),
+    ("Transcritor.exe", "icone.ico", "PORTAL", "winexe"),
 ]
 
 
@@ -38,12 +40,13 @@ def main():
         print("Compilador C# (.NET Framework 4) não encontrado.")
         sys.exit(1)
 
-    for nome, icone, simbolo in LANCADORES:
+    for nome, icone, simbolo, tipo in LANCADORES:
 
         saida = os.path.join(RAIZ, nome)
 
         r = subprocess.run([
-            csc, "/nologo", "/target:exe", "/optimize+", "/platform:anycpu",
+            csc, "/nologo", f"/target:{tipo}", "/optimize+", "/platform:anycpu",
+            "/codepage:65001",
             f"/define:{simbolo}",
             f"/win32icon:{os.path.join(RAIZ, 'assets', icone)}",
             f"/out:{saida}", FONTE,

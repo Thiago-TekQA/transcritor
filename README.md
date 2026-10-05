@@ -24,7 +24,8 @@ combinação). O que já foi feito é pulado automaticamente.
 ## Início rápido (Windows 10/11)
 
 1. Instale o **Python 3.13** (python.org, marcando *Add to PATH*).
-2. Baixe/extraia o projeto e dê duplo clique em **`Instalar Transcritor`**
+2. **[⬇ Baixe o zip do projeto](https://github.com/Thiago-TekQA/transcritor/archive/refs/heads/main.zip)**,
+   extraia numa pasta e dê duplo clique em **`Instalar Transcritor`**
    (o ícone com a seta verde; equivale ao `Instalar.bat`). Ele instala
    FFmpeg e Ollama (via winget), cria o ambiente `.venv` com as versões
    fixadas, baixa os modelos, cria a pasta `dados/` e um atalho

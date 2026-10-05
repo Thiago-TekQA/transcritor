@@ -31,6 +31,7 @@ navegador ──HTTP/JSON──▶ src/portal/servidor.py ──▶ execucoes.py
 | `diagnostico_rede.py`, `transferir_modelo.py` | usados pela tela Ambiente (e pela linha de comando). |
 | `portal/servidor.py` | aiohttp em `127.0.0.1`; API e estáticos. |
 | `portal/execucoes.py` | planejar, copiar, iniciar/parar/cancelar, montar estado a partir dos eventos, resultados. |
+| `portal/processos.py` | mapa de processos do transcritor (inclusive de outras instalações), detecção de pipelines concorrentes e órfãos do Ollama, encerramento seguro. |
 | `portal/ambiente.py` | verificação do ambiente e correções (instalar certificados, baixar/importar modelo, Ollama). |
 
 ## Etapas e dependências
@@ -74,6 +75,21 @@ O pipeline nunca conhece a pasta do usuário. O portal copia (ou cria atalho, se
 `portal_hardlink`) o necessário para `dados/1_Videos` ou `dados/2_Audios`,
 gravando em `.copiando` e renomeando no fim. Itens que ficaram a meio caminho
 são listados na tela *Nova execução* para continuar ou deixar.
+
+## Processos
+
+`portal/processos.py` lê os processos do Windows (PowerShell/CIM) e a GPU
+(`nvidia-smi`) e monta uma árvore: pipeline → workers/FFmpeg/Ollama. A pasta da
+instalação vem do caminho do script, do worker filho ou do `.bat` que iniciou o
+pipeline (o `.bat` antigo chama o script por caminho relativo). `montar_mapa` é
+uma função pura (testada com listas sintéticas). Encerrar só aceita um PID que
+esteja no mapa **naquele momento**, nunca o próprio portal nem quem o iniciou; uma
+execução desta instalação é cancelada pelo fluxo completo (limpa só a saída
+parcial); o resto recebe `taskkill /T /F`.
+
+O Ollama é sempre encerrado pela **árvore** (`encerrar_arvore`): matar só o
+`ollama serve` deixava o processo que carrega o modelo (llama-server, ~3 GB)
+órfão, ocupando RAM.
 
 ## Segurança do portal
 

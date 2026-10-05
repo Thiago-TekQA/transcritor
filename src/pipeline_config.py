@@ -458,3 +458,32 @@ def limpar_interrompidos(registrar=None):
                     falhas += 1
 
     return removidos, falhas
+
+
+# =========================================================
+# ENCERRAR ÁRVORE DE PROCESSOS
+# =========================================================
+
+
+def encerrar_arvore(pid):
+    """Encerra um processo E todos os filhos dele (taskkill /T /F).
+
+    Necessário no Windows: `Popen.terminate()` mata só o processo, e o
+    `ollama serve` deixa para trás o processo que carrega o modelo
+    (llama-server, ~3 GB de RAM cada) — que ficava órfão ocupando memória."""
+
+    import subprocess
+
+    try:
+
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+
+        return True
+
+    except Exception:
+
+        return False

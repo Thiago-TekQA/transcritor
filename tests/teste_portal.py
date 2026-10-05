@@ -8,6 +8,9 @@ sys.path.insert(0, _SRC)
 sys.path.insert(0, os.path.join(_SRC, "portal"))
 
 import execucoes as ex  # noqa: E402
+import processos as proc  # noqa: E402
+import subprocess  # noqa: E402
+import time  # noqa: E402
 import pipeline_config as cfg  # noqa: E402
 import shutil  # noqa: E402
 import tempfile  # noqa: E402
@@ -271,6 +274,112 @@ class TesteParados(unittest.TestCase):
     def test_origem_invalida_continua_dando_erro(self):
         with self.assertRaises(ValueError):
             ex.planejar(os.path.join(self.base, "nao_existe"), ["mp3"])
+
+
+def _p(pid, ppid, nome, cmd="", ram=100, inicio=1000):
+    return {"pid": pid, "ppid": ppid, "nome": nome, "cmd": cmd,
+            "inicio": inicio + pid, "cpu_s": 1.0, "ram_mb": ram}
+
+
+class TesteProcessos(unittest.TestCase):
+
+    LISTA = [
+        _p(1, 0, "explorer.exe"),
+        _p(10, 1, "cmd.exe", 'cmd.exe /c ""X:\\Antiga\\Executar Pipeline.bat""'),
+        _p(11, 10, "python.exe", '"python"  "pipeline_transcricao_reestruturado.py" --modo simples'),
+        _p(12, 11, "python.exe", 'python X:\\Antiga\\transcrever_arquivo.py --audio "a b.mp3"'),
+        _p(20, 1, "python.exe", 'C:\\Py\\python.exe -u -X utf8 X:\\Nova\\src\\pipeline.py --etapas mp3'),
+        _p(30, 99999, "llama-server.exe", "", ram=3000),          # órfão (sem servidor)
+        _p(40, 1, "ollama.exe", "ollama serve"),
+        _p(41, 40, "llama-server.exe", "", ram=3000),             # do servidor: não é órfão
+        _p(50, 1, "python.exe", 'python X:\\Nova\\src\\portal\\servidor.py'),
+        _p(60, 1, "chrome.exe", "chrome"),                        # irrelevante
+    ]
+
+    def _mapa(self, **kw):
+        return proc.montar_mapa(self.LISTA, {}, 50, kw.get("raiz", "X:\\Nova"),
+                                kw.get("exec", {20: "20260101_000000"}))
+
+    def _todos(self, raizes):
+        for r in raizes:
+            yield r
+            yield from self._todos(r["filhos"])
+
+    def test_classificacao(self):
+        self.assertEqual(proc.classificar("python.exe", 'python -c "print(1)"'), None)
+        self.assertEqual(proc.classificar("chrome.exe", ""), None)
+        self.assertEqual(proc.classificar("python.exe", "python pipeline.py")[0], "pipeline")
+        self.assertEqual(proc.classificar("python.exe", "python transferir_modelo.py"), None)
+
+    def test_duas_instalacoes_e_concorrencia(self):
+        m = self._mapa()
+        por_pid = {r["pid"]: r for r in self._todos(m["raizes"])}
+        self.assertEqual(m["pipelines_ativos"], 2)
+        # o .bat antigo usa caminho relativo: a pasta vem do worker/.bat
+        self.assertEqual(por_pid[11]["local"], "X:\\Antiga")
+        self.assertFalse(por_pid[11]["desta_instalacao"])
+        self.assertEqual(por_pid[20]["local"], "X:\\Nova")
+        self.assertTrue(por_pid[20]["desta_instalacao"])
+        self.assertEqual(por_pid[20]["execucao"], "20260101_000000")
+        self.assertTrue(any("2 pipelines" in a for a in m["alertas"]))
+
+    def test_workers_ficam_sob_o_pipeline(self):
+        m = self._mapa()
+        por_pid = {r["pid"]: r for r in self._todos(m["raizes"])}
+        self.assertEqual([f["pid"] for f in por_pid[11]["filhos"]], [12])
+        self.assertEqual([f["pid"] for f in por_pid[40]["filhos"]], [41])
+
+    def test_orfao_do_ollama(self):
+        m = self._mapa()
+        por_pid = {r["pid"]: r for r in self._todos(m["raizes"])}
+        self.assertTrue(por_pid[30]["orfao"])
+        self.assertFalse(por_pid[41]["orfao"])
+        self.assertEqual(m["orfaos"], 1)
+        self.assertTrue(any("órfãos" in a for a in m["alertas"]))
+
+    def test_portal_proprio_e_ancestrais_sao_protegidos(self):
+        m = self._mapa()
+        por_pid = {r["pid"]: r for r in self._todos(m["raizes"])}
+        self.assertTrue(por_pid[50]["proprio"] and por_pid[50]["protegido"])
+        self.assertNotIn(60, por_pid)  # navegador não é do transcritor
+
+    def test_encerrar_so_pid_do_mapa_e_nunca_o_proprio(self):
+        with self.assertRaises(ValueError):
+            proc.encerrar("abc")
+        with self.assertRaises(ValueError):
+            proc.encerrar(4)                  # PID existente, mas fora do mapa
+        with self.assertRaises(ValueError):
+            proc.encerrar(os.getpid())        # o próprio processo de teste
+
+    @unittest.skipUnless(os.name == "nt", "mapeamento real é só Windows")
+    def test_encerra_processo_de_mentira_sem_tocar_nos_outros(self):
+        pasta = tempfile.mkdtemp(prefix="falso_pipeline_")
+        script = os.path.join(pasta, "pipeline.py")
+        with open(script, "w") as f:
+            f.write("import time\ntime.sleep(120)\n")
+        falso = subprocess.Popen([sys.executable, script],
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+        try:
+            achado = None
+            for _ in range(10):
+                time.sleep(0.5)
+                mapa = proc.listar()
+                achado = next((r for r in self._todos(mapa["raizes"]) if r["pid"] == falso.pid), None)
+                if achado:
+                    break
+            self.assertIsNotNone(achado, "o processo de mentira deveria aparecer no mapa")
+            self.assertEqual(achado["tipo"], "pipeline")
+            self.assertFalse(achado["desta_instalacao"])
+            antes = {r["pid"] for r in self._todos(mapa["raizes"])} - {falso.pid}
+            msg = proc.encerrar(falso.pid)
+            self.assertIn("encerrado", msg)
+            self.assertIsNotNone(falso.wait(timeout=10))
+            depois = {r["pid"] for r in self._todos(proc.listar()["raizes"])}
+            # nenhum outro processo do transcritor foi afetado
+            self.assertTrue(antes <= depois | {falso.pid}, f"sumiram: {antes - depois}")
+        finally:
+            falso.kill()
+            shutil.rmtree(pasta, ignore_errors=True)
 
 
 class TesteNomes(unittest.TestCase):

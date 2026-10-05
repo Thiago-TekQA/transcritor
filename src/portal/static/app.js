@@ -190,6 +190,7 @@
       vistos: new Set(),
       vistosP: new Set(),
       analisando: false,
+      concorrentes: null,
     };
 
     const campoPasta = h("input", {
@@ -198,6 +199,7 @@
       "aria-label": "Pasta de origem",
     });
     const areaPlano = h("div", {});
+    const areaAvisos = h("div", {});
     const areaPresets = h("div", { class: "presets" });
     const areaEtapas = h("div", { class: "etapas" });
     const chkSub = h("input", { type: "checkbox" });
@@ -392,6 +394,9 @@
 
       const iniciar = h("button", { class: "primario", disabled: !todosSel.length || bloqueados.length > 0 || !algoParaFazer,
         onclick: async () => {
+          if (est.concorrentes && !confirm(
+            `Já há ${est.concorrentes} pipeline(s) rodando neste computador. Uma nova execução vai disputar a GPU e a memória com ela(s) ` +
+            "(mais lenta e mais sujeita a falhas). Iniciar mesmo assim?\n\nDica: a tela Processos mostra e permite encerrar o que estiver sobrando.")) return;
           iniciar.disabled = true;
           try {
             const r = await api("/api/execucoes", { method: "POST", corpo: {
@@ -433,6 +438,7 @@
       config.modelo_em_cache ? null : h("div", { class: "aviso-faixa" },
         `O modelo de transcrição "${config.modelo_whisper}" ainda não está neste computador: ele será baixado da internet na primeira transcrição (~500 MB). ` +
         "Se a rede bloquear (erro de certificado), ", h("a", { href: "#/ambiente" }, "abra a tela Ambiente"), " para verificar e corrigir (certificados, download ou importação do modelo)."),
+      areaAvisos,
       h("div", { class: "cartao" },
         h("h2", {}, "1. Pasta de origem"),
         h("div", { class: "linha" }, campoPasta,
@@ -444,7 +450,28 @@
       areaPlano,
     );
 
+    async function verificarConcorrencia() {
+      try {
+        const m = await api("/api/processos");
+        if (minhaRota !== rotaId) return;
+        est.concorrentes = m.pipelines_ativos || 0;
+        const avisos = [];
+        if (m.pipelines_ativos) {
+          avisos.push(h("div", { class: "aviso-faixa" },
+            `Já há ${m.pipelines_ativos} pipeline(s) rodando neste computador (podem ser de outra instalação). Iniciar outra execução vai disputar a GPU e a memória. `,
+            h("a", { href: "#/processos" }, "Ver processos")));
+        }
+        if (m.orfaos) {
+          avisos.push(h("div", { class: "aviso-faixa" },
+            `${m.orfaos} processo(s) do Ollama órfãos estão ocupando memória à toa. `,
+            h("a", { href: "#/processos" }, "Ver e encerrar")));
+        }
+        trocar(areaAvisos, ...avisos);
+      } catch (_) { /* sem mapeamento: segue sem aviso */ }
+    }
+
     analisar();
+    verificarConcorrencia();
   }
 
   // ---------------------------------------------------------------- Execução (acompanhamento)
@@ -844,6 +871,116 @@
     acompanhar();
   }
 
+  // ---------------------------------------------------------------- Processos
+
+  function haQuanto(epoch) {
+    const s = Math.max(0, Math.round(Date.now() / 1000 - epoch));
+    return s < 60 ? `${s}s` : fmtDur(s);
+  }
+
+  function viewProcessos() {
+    const minhaRota = rotaId;
+    const corpo = h("div", {});
+
+    app.replaceChildren(h("h1", {}, "Processos"),
+      h("p", { class: "sub" }, "Tudo o que o transcritor está rodando neste computador — inclusive de outras instalações ou cópias do projeto. Dois pipelines ao mesmo tempo disputam a GPU e causam lentidão e falhas."),
+      corpo);
+
+    function textoConfirmacao(r) {
+      if (r.tipo === "pipeline" && r.execucao) {
+        return `Cancelar a execução ${r.execucao}? O arquivo em andamento será interrompido (só a saída parcial dessa etapa é descartada; vídeo e áudio ficam).`;
+      }
+      if (r.tipo === "pipeline") {
+        return `Encerrar o pipeline (PID ${r.pid}) de OUTRA instalação${r.local ? ` (${r.local})` : ""}?\n\nO que ele está processando ficará incompleto: arquivos parciais na pasta dele, descartados na próxima execução dela.`;
+      }
+      if (r.tipo === "ollama" && r.orfao) {
+        return `Encerrar este processo órfão do Ollama (PID ${r.pid}, ${r.ram_mb} MB)? Nenhum servidor o usa.`;
+      }
+      if (r.tipo === "ollama") {
+        return "Encerrar o Ollama? Qualquer resumo em andamento vai falhar (o pipeline liga o Ollama de novo quando precisar).";
+      }
+      return `Encerrar ${r.rotulo} (PID ${r.pid}) e os processos filhos dele?`;
+    }
+
+    async function encerrar(r) {
+      if (!confirm(textoConfirmacao(r))) return;
+      try {
+        const resp = await api(`/api/processos/${r.pid}/encerrar`, { method: "POST", corpo: { confirmar: true } });
+        alert(resp.mensagem);
+      } catch (e) { alert(e.message); }
+      carregar(true);
+    }
+
+    async function encerrarOrfaos(lista) {
+      const gb = (lista.reduce((a, r) => a + r.ram_mb, 0) / 1024).toFixed(1);
+      if (!confirm(`Encerrar ${lista.length} processo(s) órfão(s) do Ollama (~${gb} GB de RAM)? Nenhum servidor os usa.`)) return;
+      for (const r of lista) {
+        try { await api(`/api/processos/${r.pid}/encerrar`, { method: "POST", corpo: { confirmar: true } }); } catch (_) { /* segue */ }
+      }
+      carregar(true);
+    }
+
+    function linhas(raizes, nivel, saida) {
+      for (const r of raizes) {
+        saida.push([r, nivel]);
+        linhas(r.filhos, nivel + 1, saida);
+      }
+      return saida;
+    }
+
+    function desenhar(m) {
+      const todos = linhas(m.raizes, 0, []);
+      const orfaos = todos.map(([r]) => r).filter((r) => r.orfao);
+
+      const gpu = m.gpu ? h("div", { class: "cartao" }, h("div", { class: "resumo-contagem" },
+        h("div", {}, h("strong", {}, m.gpu.nome), h("span", {}, "placa de vídeo")),
+        h("div", {}, h("strong", {}, `${m.gpu.uso_pct}%`), h("span", {}, "uso da GPU")),
+        h("div", {}, h("strong", {}, `${m.gpu.temp_c} °C`), h("span", {}, "temperatura")),
+        h("div", {}, h("strong", {}, `${(m.gpu.mem_usada_mb / 1024).toFixed(1)} / ${(m.gpu.mem_total_mb / 1024).toFixed(1)} GB`), h("span", {}, "memória da GPU")),
+        h("div", {}, h("strong", {}, String(m.pipelines_ativos)), h("span", {}, "pipelines ativos")))) : null;
+
+      const faixas = m.alertas.map((a) => h("div", { class: "aviso-faixa" }, a));
+
+      const tabela = todos.length ? h("div", { class: "cartao" },
+        h("div", { class: "linha", style: "margin-bottom:10px" }, h("h2", { style: "margin:0" }, "Processos do transcritor"),
+          h("span", { class: "espaco" }),
+          orfaos.length ? h("button", { onclick: () => encerrarOrfaos(orfaos) }, `Encerrar ${orfaos.length} órfão(s) do Ollama`) : null,
+          h("button", { onclick: () => carregar(true) }, "Atualizar")),
+        h("div", { class: "tabela-rolagem" }, h("table", {},
+          h("thead", {}, h("tr", {}, ["Processo", "PID", "Onde", "Rodando há", "CPU", "RAM", ""].map((t) => h("th", {}, t)))),
+          h("tbody", {}, todos.map(([r, nivel]) => h("tr", {},
+            h("td", { class: "nome" }, h("span", { style: `margin-left:${nivel * 22}px` }, nivel ? "└ " : ""), r.rotulo + " ",
+              r.orfao ? pilula("órfão", "erro") : null, r.proprio ? pilula("este portal", "info") : null,
+              r.execucao ? pilula("execução do portal", "info") : null,
+              h("div", { class: "sutil", title: r.comando, style: `margin-left:${nivel * 22}px` }, r.comando.length > 90 ? r.comando.slice(0, 90) + "…" : r.comando)),
+            h("td", { class: "num" }, String(r.pid)),
+            h("td", { class: "sutil" }, !r.local ? "—" : r.desta_instalacao ? "esta instalação" : `OUTRA: ${r.local}`),
+            h("td", { class: "num" }, haQuanto(r.inicio)),
+            h("td", { class: "num" }, fmtDur(r.cpu_s)),
+            h("td", { class: "num" }, `${r.ram_mb} MB`),
+            h("td", {}, r.proprio || r.protegido ? null :
+              h("button", { class: "perigo", onclick: () => encerrar(r) }, r.tipo === "pipeline" && r.execucao ? "Cancelar execução" : "Encerrar")))))))
+      ) : h("div", { class: "cartao vazio" }, "Nenhum processo do transcritor em execução.");
+
+      trocar(corpo, gpu, ...faixas, tabela);
+    }
+
+    async function carregar(forcar) {
+      if (minhaRota !== rotaId) return;
+      try {
+        const m = await api("/api/processos");
+        if (minhaRota !== rotaId) return;
+        desenhar(m);
+      } catch (e) {
+        corpo.replaceChildren(h("div", { class: "aviso-faixa erro" }, e.message));
+      }
+      if (!forcar && minhaRota === rotaId) timers.push(setTimeout(carregar, 4000));
+    }
+
+    corpo.replaceChildren(h("div", { class: "vazio" }, "Mapeando processos…"));
+    carregar();
+  }
+
   // ---------------------------------------------------------------- roteador
 
   function marcarMenu(rota) {
@@ -875,6 +1012,7 @@
     else if (rota === "execucoes") viewExecucoes();
     else if (rota === "resultados") viewResultados();
     else if (rota === "ambiente") viewAmbiente();
+    else if (rota === "processos") viewProcessos();
     else viewNova();
     atualizarAtiva();
   }

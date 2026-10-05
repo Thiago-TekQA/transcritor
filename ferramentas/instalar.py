@@ -164,7 +164,7 @@ def etapa_ollama(modelo):
     codigo = rodar(["ollama", "pull", modelo])
 
     if processo is not None:
-        processo.terminate()
+        cfg.encerrar_arvore(processo.pid)
 
     if codigo != 0:
         print(f"  ERRO ao baixar o modelo. Tente depois: ollama pull {modelo}")

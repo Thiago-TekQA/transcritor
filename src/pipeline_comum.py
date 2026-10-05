@@ -70,6 +70,7 @@ from pipeline_config import (  # noqa: E402,F401
     item_selecionado,
     adquirir_trava,
     limpar_interrompidos,
+    encerrar_arvore,
     restaurar_consolidacao,
     MANIFESTO_CONSOLIDACAO,
 )
@@ -653,7 +654,8 @@ def parar_ollama_se_iniciado_por_nos(processo, log=print):
 
     try:
 
-        processo.terminate()
+        # árvore inteira: só terminate() deixaria o llama-server órfão
+        encerrar_arvore(processo.pid)
         processo.wait(timeout=15)
 
     except Exception:

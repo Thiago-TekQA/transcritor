@@ -25,6 +25,7 @@ from aiohttp import web  # noqa: E402
 import pipeline_config as cfg  # noqa: E402
 import execucoes as ex  # noqa: E402
 import ambiente as amb  # noqa: E402
+import processos as proc  # noqa: E402
 
 PORTA = int(cfg.CONFIG.get("portal_porta") or 8765)
 HOSTS_OK = {f"127.0.0.1:{PORTA}", f"localhost:{PORTA}"}
@@ -153,6 +154,29 @@ async def config(request):
             for e in cfg.ETAPAS_VALIDAS
         ],
     })
+
+
+async def processos_listar(request):
+
+    try:
+        return _json(await _bloqueante(proc.listar))
+    except Exception as e:
+        return _erro(f"não consegui listar os processos: {e}", 500)
+
+
+async def processos_encerrar(request):
+
+    d = await _corpo(request)
+
+    # exige confirmação explícita no corpo (a tela só envia depois do "OK")
+    if d.get("confirmar") is not True:
+        return _erro("confirmação ausente")
+
+    try:
+        texto = await _bloqueante(proc.encerrar, request.match_info["pid"])
+        return _json({"ok": True, "mensagem": texto})
+    except ValueError as e:
+        return _erro(str(e))
 
 
 async def ambiente_verificar(request):
@@ -346,6 +370,8 @@ def criar_app():
 
     app.router.add_get("/api/ping", ping)
     app.router.add_get("/api/config", config)
+    app.router.add_get("/api/processos", processos_listar)
+    app.router.add_post("/api/processos/{pid}/encerrar", processos_encerrar)
     app.router.add_get("/api/ambiente", ambiente_verificar)
     app.router.add_post("/api/ambiente/acao", ambiente_acao)
     app.router.add_get("/api/ambiente/tarefa", ambiente_tarefa)

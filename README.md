@@ -48,6 +48,12 @@ Requisitos, rede corporativa/antivírus e atualização de instalações antigas
 3. **Resultados**: reuniões concluídas e parciais; abre resumo, transcrição e log.
 4. **Ambiente**: verifica o que o computador precisa (FFmpeg, certificados do
    Windows, acesso ao Hugging Face, modelos) e **corrige com um clique**.
+5. **Processos**: mapa de tudo o que o transcritor está rodando no computador —
+   pipelines, workers, FFmpeg, Ollama e outros portais, inclusive de **outras
+   instalações** —, com CPU, RAM, GPU e de qual instalação é cada um. Avisa
+   quando há **pipelines concorrentes** (disputam a GPU) ou processos do Ollama
+   **órfãos** ocupando memória, e permite encerrá-los com confirmação. A tela
+   *Nova execução* também avisa antes de iniciar se já há outro pipeline rodando.
 
 A pasta de origem **nunca é alterada**: os arquivos são copiados para a área de
 trabalho. Fechar o portal **não interrompe** uma execução; ao reabrir, ele

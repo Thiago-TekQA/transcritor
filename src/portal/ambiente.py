@@ -162,7 +162,7 @@ def _acao_ollama():
     finally:
 
         if iniciado is not None:
-            iniciado.terminate()
+            cfg.encerrar_arvore(iniciado.pid)
 
 
 def _comando(acao, caminho):
